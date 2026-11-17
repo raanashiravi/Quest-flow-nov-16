@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CampusMeeting,
   CampusSettings,
@@ -50,6 +50,39 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   const [travelWarning, setTravelWarning] = useState<string | null>(null);
   const [isImpossible, setIsImpossible] = useState<boolean>(false);
   const [workingSlots, setWorkingSlots] = useState<SuggestedSlot[]>([]);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Close on Escape and trap focus inside modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !modalRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last || !modalRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -348,18 +381,28 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-label={meetingToEdit ? 'Edit Meeting' : 'Schedule Campus Meeting'}
+    >
       <div className="absolute inset-0" onClick={onClose} />
 
-      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-10 flex flex-col max-h-[90vh]">
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-10 flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-900">
             {meetingToEdit ? 'Edit Meeting' : 'Schedule Campus Meeting'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            aria-label="Close modal"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           >
             <X className="w-5 h-5" />
           </button>

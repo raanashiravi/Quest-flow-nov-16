@@ -33,6 +33,7 @@ interface NextMeetingPageProps {
   onConnectCalendar: () => void;
   onLoadSample: () => void;
   isModal?: boolean;
+  isFromCalendar?: boolean;
   onClose?: () => void;
 }
 
@@ -44,6 +45,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
   onConnectCalendar,
   onLoadSample,
   isModal = false,
+  isFromCalendar = true,
   onClose,
 }) => {
   const [travelMode, setTravelMode] = useState<TravelMode>('walk');
@@ -470,15 +472,15 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
 
             <button
               type="button"
-              onClick={onClose || onOpenCalendar}
-              className={`flex-1 px-5 py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+              onClick={isModal && isFromCalendar ? onClose || onOpenCalendar : onOpenCalendar}
+              className={`flex-1 px-5 py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
                 isOnline
                   ? 'font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md'
                   : 'font-semibold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700'
               }`}
             >
               <Calendar className={`w-4 h-4 shrink-0 ${isOnline ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
-              <span>{isModal ? 'Back to Calendar' : 'View Full Calendar'}</span>
+              <span>{isModal && isFromCalendar ? 'Back to Calendar' : 'View Full Calendar'}</span>
             </button>
           </div>
         </div>

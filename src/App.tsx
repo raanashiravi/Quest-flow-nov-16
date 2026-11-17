@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CampusMeeting,
   CampusSettings,
@@ -18,9 +18,35 @@ import { getGoogleMapsDirectionsUrl } from './utils/googleMapsLinks';
 import { Bell, Navigation, X, ExternalLink } from 'lucide-react';
 
 export default function App() {
-  // Page Stepper navigation state: welcome -> connect -> review
+  // Meetings: user calendar starts empty unless loaded via sample or imported
+  const [meetings, setMeetings] = useState<CampusMeeting[]>(() => {
+    try {
+      const saved = localStorage.getItem('questflow_meetings_v6');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  // Page Stepper navigation state:
+  // - First-run visitors land on 'welcome'
+  // - Returning users with meetings loaded open directly on 'review' (Calendar)
   const [currentPage, setCurrentPage] = useState<AppPage>(() => {
     try {
+      const hasVisited = localStorage.getItem('questflow_visited_v6') === 'true';
+      localStorage.setItem('questflow_visited_v6', 'true');
+      if (!hasVisited) {
+        return 'welcome';
+      }
+      const savedMeetingsRaw = localStorage.getItem('questflow_meetings_v6');
+      if (savedMeetingsRaw) {
+        const parsed = JSON.parse(savedMeetingsRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return 'review';
+        }
+      }
       const savedPage = localStorage.getItem('questflow_page_v6');
       if (savedPage && ['welcome', 'connect', 'review'].includes(savedPage)) {
         return savedPage as AppPage;
@@ -32,8 +58,14 @@ export default function App() {
     return 'welcome';
   });
 
+  // Track previous page so "Back" on ConnectCalendarPage returns to the page actually visited
+  const [previousPage, setPreviousPage] = useState<AppPage>(() =>
+    currentPage === 'review' ? 'review' : 'welcome'
+  );
+
   // Next Up modal box visibility (opened from Calendar blue time strip or Welcome shortcut)
   const [isNextUpOpen, setIsNextUpOpen] = useState(false);
+  const nextUpDialogRef = useRef<HTMLDivElement>(null);
 
   // Selected date
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -42,18 +74,6 @@ export default function App() {
       if (saved) return saved;
     } catch {}
     return getTodayLocalDateString();
-  });
-
-  // Meetings: user calendar starts empty unless loaded via sample or imported
-  const [meetings, setMeetings] = useState<CampusMeeting[]>(() => {
-    try {
-      const saved = localStorage.getItem('questflow_meetings_v6');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
   });
 
   // Settings
@@ -89,11 +109,33 @@ export default function App() {
     } catch {}
   }, [meetings, selectedDate, settings, currentPage]);
 
-  // Close Next Up modal on Escape
+  // Close Next Up modal on Escape & trap focus inside dialog
   useEffect(() => {
     if (!isNextUpOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsNextUpOpen(false);
+      if (e.key === 'Escape') {
+        setIsNextUpOpen(false);
+        return;
+      }
+      if (e.key === 'Tab' && nextUpDialogRef.current) {
+        const focusable = nextUpDialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !nextUpDialogRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last || !nextUpDialogRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -200,6 +242,9 @@ export default function App() {
 
   // Navigation handler
   const handleSelectPage = (targetPage: AppPage) => {
+    if (targetPage !== currentPage && currentPage !== 'connect') {
+      setPreviousPage(currentPage);
+    }
     setCurrentPage(targetPage);
   };
 
@@ -232,15 +277,17 @@ export default function App() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setActiveDepartureAlert(null)}
-              className="px-3 py-1.5 text-xs font-semibold text-neutral-900 bg-white hover:bg-neutral-100 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+              className="px-3 py-1.5 text-xs font-semibold text-neutral-900 bg-white hover:bg-neutral-100 rounded-lg transition-colors flex items-center gap-1.5 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <Navigation className="w-3.5 h-3.5 text-blue-600" />
               <span>Google Maps</span>
               <ExternalLink className="w-3 h-3 text-neutral-500" />
             </a>
             <button
+              type="button"
+              aria-label="Dismiss departure reminder"
               onClick={() => setActiveDepartureAlert(null)}
-              className="p-1.5 text-neutral-400 hover:text-white rounded-lg transition-colors"
+              className="p-1.5 text-neutral-400 hover:text-white rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <X className="w-4 h-4" />
             </button>
@@ -264,10 +311,9 @@ export default function App() {
           <WelcomeHeroPage
             onStartSampleWalkthrough={handleStartSampleWalkthrough}
             onOpenNextMeeting={() => {
-              setCurrentPage('review');
               setIsNextUpOpen(true);
             }}
-            onConnectCalendar={() => setCurrentPage('connect')}
+            onConnectCalendar={() => handleSelectPage('connect')}
           />
         )}
 
@@ -279,9 +325,10 @@ export default function App() {
               setMeetings(newMeetings);
             }}
             onContinue={() => {
+              setPreviousPage('connect');
               setCurrentPage('review');
             }}
-            onBack={() => setCurrentPage('welcome')}
+            onBack={() => setCurrentPage(previousPage === 'review' ? 'review' : 'welcome')}
           />
         )}
 
@@ -296,7 +343,7 @@ export default function App() {
             onDeleteMeeting={handleDeleteMeeting}
             onQuickToggleFormat={handleQuickToggleFormat}
             onOpenNextMeeting={() => setIsNextUpOpen(true)}
-            onBackToConnect={() => setCurrentPage('connect')}
+            onBackToConnect={() => handleSelectPage('connect')}
             settings={settings}
           />
         )}
@@ -312,6 +359,7 @@ export default function App() {
           aria-label="Next Up Meetings"
         >
           <div
+            ref={nextUpDialogRef}
             className="w-full max-w-xl relative my-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -321,7 +369,7 @@ export default function App() {
                 type="button"
                 onClick={() => setIsNextUpOpen(false)}
                 aria-label="Close Next Up"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg text-neutral-700 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-50 transition-colors cursor-pointer text-xs font-bold"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg text-neutral-700 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-50 transition-colors cursor-pointer text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 <X className="w-4 h-4" />
                 <span>Close</span>
@@ -333,6 +381,7 @@ export default function App() {
               selectedDate={selectedDate}
               settings={settings}
               isModal={true}
+              isFromCalendar={currentPage === 'review'}
               onClose={() => setIsNextUpOpen(false)}
               onOpenCalendar={() => {
                 setCurrentPage('review');
@@ -340,7 +389,7 @@ export default function App() {
               }}
               onConnectCalendar={() => {
                 setIsNextUpOpen(false);
-                setCurrentPage('connect');
+                handleSelectPage('connect');
               }}
               onLoadSample={handleStartSampleWalkthrough}
             />

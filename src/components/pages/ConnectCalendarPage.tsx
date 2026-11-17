@@ -350,7 +350,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
               placeholder="https://outlook.office365.com/owa/calendar/.../reachcalendar.ics"
               className="w-full px-3.5 py-2.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-neutral-900 dark:text-white font-medium"
             />
-            <p className="text-[11px] text-neutral-400 mt-1">
+            <p className="text-[11px] text-neutral-500 mt-1">
               Tip: In Outlook Web, go to Settings ⚙️ → Calendar → Shared calendars → Publish a calendar → copy the ICS link.
             </p>
           </div>
@@ -481,7 +481,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl transition-colors flex items-center gap-1.5"
+          className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
@@ -490,7 +490,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
         <button
           type="button"
           onClick={handleAttemptContinue}
-          className={`px-6 py-2.5 text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-2 ${
+          className={`px-6 py-2.5 text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
             hasMeetings
               ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer active:scale-[0.98]'
               : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'

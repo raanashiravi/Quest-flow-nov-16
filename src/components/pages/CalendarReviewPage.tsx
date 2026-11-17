@@ -209,6 +209,34 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   const [fixCopied, setFixCopied] = useState<boolean>(false);
   const [resolvedByMeetingId, setResolvedByMeetingId] = useState<Record<string, string>>({});
   const [fixedNotice, setFixedNotice] = useState<string | null>(null);
+  const fixSheetRef = useRef<HTMLDivElement>(null);
+
+  // Trap focus and close on Escape when the Fix sheet is open
+  useEffect(() => {
+    if (!activeFixProblem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setActiveFixProblem(null);
+      } else if (e.key === 'Tab' && fixSheetRef.current) {
+        const focusable = fixSheetRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeFixProblem]);
 
   // Live time-of-day clock (updates every 15s)
   const [now, setNow] = useState<Date>(() => new Date());
@@ -532,8 +560,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 {meeting.title}
               </p>
               {wasLateToday && (
-                <span className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-semibold shrink-0">
-                  Was late
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-semibold shrink-0">
+                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                  <span>Was late</span>
                 </span>
               )}
               {targetProblem && (
@@ -542,16 +571,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   className="inline-flex items-center gap-1 shrink-0"
                 >
                   <span
-                    className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold ${
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
                       targetProblem.isOverlap ? '' : 'uppercase'
-                    } ${isTight ? 'bg-amber-500' : 'bg-rose-600'}`}
+                    } ${isTight ? 'bg-amber-500 text-amber-950' : 'bg-rose-600 text-white'}`}
                   >
-                    {targetProblem.badgeText}
+                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                    <span>{targetProblem.badgeText}</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => handleOpenFixSheet(targetProblem)}
-                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
                       isTight
                         ? 'bg-amber-600 hover:bg-amber-700'
                         : 'bg-rose-700 hover:bg-rose-800'
@@ -594,7 +624,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               title={`Open ${meeting.buildingCode} in Google Maps`}
             >
               <Navigation className="w-3 h-3 shrink-0" />
@@ -605,8 +635,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           <button
             type="button"
             onClick={() => onEditMeeting(meeting)}
-            className="p-1.5 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
             title="Edit Meeting"
+            aria-label="Edit meeting"
           >
             <Edit3 className="w-3.5 h-3.5" />
           </button>
@@ -619,14 +650,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   onDeleteMeeting(meeting.id);
                   setDeleteConfirmId(null);
                 }}
-                className="px-2 py-0.5 text-xs font-bold text-white bg-rose-600 rounded cursor-pointer"
+                className="px-2 py-0.5 text-xs font-bold text-white bg-rose-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                aria-label="Confirm delete meeting"
               >
                 Del
               </button>
               <button
                 type="button"
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-1.5 py-0.5 text-xs text-neutral-600 rounded cursor-pointer"
+                className="px-1.5 py-0.5 text-xs text-neutral-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                aria-label="Cancel delete"
               >
                 ✕
               </button>
@@ -635,8 +668,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             <button
               type="button"
               onClick={() => setDeleteConfirmId(meeting.id)}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
               title="Delete Meeting"
+              aria-label="Delete meeting"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -926,7 +960,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   return (
                     <div
                       key={hour}
-                      className="absolute right-2 -translate-y-1/2 text-[11px] font-bold text-neutral-400 dark:text-neutral-500 tabular-nums"
+                      className="absolute right-2 -translate-y-1/2 text-[11px] font-bold text-neutral-500 dark:text-neutral-500 tabular-nums"
                       style={{ top: `${topPx}px` }}
                     >
                       {formatHourAxis(hour)}
@@ -1043,18 +1077,21 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                           {leg.questFlowTravelMinutes}m walk
                         </span>
                         {isLate && (
-                          <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold uppercase shrink-0">
-                            Late
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                            <span>Late</span>
                           </span>
                         )}
                         {isTight && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-extrabold uppercase shrink-0">
-                            Tight
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500 text-amber-950 text-[10px] font-extrabold uppercase shrink-0">
+                            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                            <span>Tight</span>
                           </span>
                         )}
                         {isResolved && (
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
-                            Fixed
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                            <Check className="w-2.5 h-2.5 shrink-0" />
+                            <span>Fixed</span>
                           </span>
                         )}
                       </div>
@@ -1168,17 +1205,18 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <span
-                                    className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold truncate max-w-[180px] ${
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold truncate max-w-[180px] ${
                                       targetProblem.isOverlap ? '' : 'uppercase'
-                                    } ${isTightProblem ? 'bg-amber-500' : 'bg-rose-600'}`}
+                                    } ${isTightProblem ? 'bg-amber-500 text-amber-950' : 'bg-rose-600 text-white'}`}
                                     title={targetProblem.badgeText}
                                   >
-                                    {targetProblem.badgeText}
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="truncate">{targetProblem.badgeText}</span>
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenFixSheet(targetProblem)}
-                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer shrink-0 ${
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
                                       isTightProblem
                                         ? 'bg-amber-600 hover:bg-amber-700'
                                         : 'bg-rose-700 hover:bg-rose-800'
@@ -1296,16 +1334,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <span
-                                    className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold ${
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
                                       targetProblem.isOverlap ? '' : 'uppercase'
-                                    } ${isTightProblem ? 'bg-amber-500' : 'bg-rose-600'}`}
+                                    } ${isTightProblem ? 'bg-amber-500 text-amber-950' : 'bg-rose-600 text-white'}`}
                                   >
-                                    {targetProblem.badgeText}
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                    <span>{targetProblem.badgeText}</span>
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenFixSheet(targetProblem)}
-                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer ${
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
                                       isTightProblem
                                         ? 'bg-amber-600 hover:bg-amber-700'
                                         : 'bg-rose-700 hover:bg-rose-800'
@@ -1397,8 +1436,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             <button
                               type="button"
                               onClick={() => onEditMeeting(meeting)}
-                              className="p-1 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                              className="p-1 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                               title="Edit Meeting"
+                              aria-label="Edit meeting"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -1411,14 +1451,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                     onDeleteMeeting(meeting.id);
                                     setDeleteConfirmId(null);
                                   }}
-                                  className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded cursor-pointer"
+                                  className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                                  aria-label="Confirm delete meeting"
                                 >
                                   Del
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setDeleteConfirmId(null)}
-                                  className="px-1 py-0.5 text-[10px] text-neutral-600 rounded cursor-pointer"
+                                  className="px-1 py-0.5 text-[10px] text-neutral-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                                  aria-label="Cancel delete"
                                 >
                                   ✕
                                 </button>
@@ -1427,8 +1469,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setDeleteConfirmId(meeting.id)}
-                                className="p-1 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                                className="p-1 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
                                 title="Delete Meeting"
+                                aria-label="Delete meeting"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1622,6 +1665,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             aria-modal="true"
           >
             <div
+              ref={fixSheetRef}
               className="relative w-full sm:max-w-md bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-2xl border-t sm:border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >

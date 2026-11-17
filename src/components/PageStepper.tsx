@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, Link2, Home, Plus, Sparkles, Menu, X } from 'lucide-react';
 
 export type AppPage = 'welcome' | 'connect' | 'review';
@@ -21,6 +21,7 @@ export const PageStepper: React.FC<PageStepperProps> = ({
   onLoadSample,
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
 
   const navItems: {
     id: AppPage;
@@ -40,11 +41,33 @@ export const PageStepper: React.FC<PageStepperProps> = ({
     { id: 'connect', label: 'Sync Calendar', sub: 'Outlook & .ICS', icon: Link2 },
   ];
 
-  // Close mobile sidebar on Escape key
+  // Close mobile sidebar on Escape key and trap focus
   useEffect(() => {
     if (!isSidebarOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsSidebarOpen(false);
+      if (e.key === 'Escape') {
+        setIsSidebarOpen(false);
+        return;
+      }
+      if (e.key === 'Tab' && sidebarRef.current) {
+        const focusable = sidebarRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !sidebarRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last || !sidebarRef.current.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -164,7 +187,12 @@ export const PageStepper: React.FC<PageStepperProps> = ({
 
       {/* Mobile Slide-Over Sidebar Drawer */}
       {isSidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex justify-end">
+        <div
+          className="fixed inset-0 z-50 md:hidden flex justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+        >
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-neutral-900/45 backdrop-blur-xs transition-opacity"
@@ -172,7 +200,10 @@ export const PageStepper: React.FC<PageStepperProps> = ({
           />
 
           {/* Sidebar Panel */}
-          <aside className="relative w-72 max-w-[85vw] h-full bg-white dark:bg-neutral-900 border-l border-neutral-200 dark:border-neutral-800 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-200">
+          <aside
+            ref={sidebarRef}
+            className="relative w-72 max-w-[85vw] h-full bg-white dark:bg-neutral-900 border-l border-neutral-200 dark:border-neutral-800 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-200"
+          >
             {/* Sidebar Header */}
             <div className="px-5 h-16 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">

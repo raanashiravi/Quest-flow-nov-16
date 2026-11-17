@@ -34,7 +34,7 @@ export const WelcomeHeroPage: React.FC<WelcomeHeroPageProps> = ({
           <button
             type="button"
             onClick={onStartSampleWalkthrough}
-            className="px-6 py-4 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-95"
+            className="px-6 py-4 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
             <Sparkles className="w-4 h-4 shrink-0" />
             <span>Try Sample Walkthrough</span>
@@ -44,7 +44,7 @@ export const WelcomeHeroPage: React.FC<WelcomeHeroPageProps> = ({
           <button
             type="button"
             onClick={onOpenNextMeeting}
-            className="px-6 py-4 text-sm font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95"
+            className="px-6 py-4 text-sm font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
             <Zap className="w-4 h-4 shrink-0" />
             <span>Next Meeting (In a Rush)</span>
@@ -54,7 +54,7 @@ export const WelcomeHeroPage: React.FC<WelcomeHeroPageProps> = ({
           <button
             type="button"
             onClick={onConnectCalendar}
-            className="px-6 py-4 text-sm font-semibold text-neutral-800 dark:text-neutral-200 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 border border-neutral-300 dark:border-neutral-700 rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95"
+            className="px-6 py-4 text-sm font-semibold text-neutral-800 dark:text-neutral-200 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 border border-neutral-300 dark:border-neutral-700 rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
             <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
             <span>Input My Calendar</span>
