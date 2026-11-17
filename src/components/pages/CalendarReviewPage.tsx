@@ -16,13 +16,22 @@ import {
   ExternalLink,
   Zap,
   ChevronRight,
+  AlertTriangle,
+  CheckCircle2,
+  Check,
+  Copy,
+  X,
+  Loader2,
+  MessageSquare,
 } from 'lucide-react';
 import { CampusMeeting, CampusSettings, TravelLeg } from '../../types';
 import {
   calculateTravelLeg,
   parseTimeToMinutes,
+  formatMinutesToTime,
   formatTime12h,
 } from '../../utils/travelCalculator';
+import { findAvailableSlots } from '../../utils/slotFinder';
 import { getTodayLocalDateString } from '../../utils/icsParser';
 import { getGoogleMapsDirectionsUrl } from '../../utils/googleMapsLinks';
 
@@ -125,6 +134,7 @@ interface CalendarReviewPageProps {
   onSelectDate: (date: string) => void;
   onAddMeeting: () => void;
   onEditMeeting: (meeting: CampusMeeting) => void;
+  onSaveMeeting?: (meeting: CampusMeeting) => void;
   onDeleteMeeting: (id: string) => void;
   onQuickToggleFormat: (id: string, format: 'in_person' | 'online' | 'hybrid') => void;
   onOpenNextMeeting: () => void;
@@ -138,6 +148,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   onSelectDate,
   onAddMeeting,
   onEditMeeting,
+  onSaveMeeting,
   onDeleteMeeting,
   onQuickToggleFormat,
   onOpenNextMeeting,
@@ -147,6 +158,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   const [filterFormat, setFilterFormat] = useState<'all' | 'in_person' | 'online' | 'hybrid'>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showPassedDropdown, setShowPassedDropdown] = useState<boolean>(false);
+
+  // Fix Sheet & Resolved Confirmation State
+  const [activeFixLeg, setActiveFixLeg] = useState<TravelLeg | null>(null);
+  const [fixDraftType, setFixDraftType] = useState<'later_start' | 'join_online' | null>(null);
+  const [fixDraftText, setFixDraftText] = useState<string>('');
+  const [isDraftingFix, setIsDraftingFix] = useState<boolean>(false);
+  const [fixCopied, setFixCopied] = useState<boolean>(false);
+  const [resolvedByMeetingId, setResolvedByMeetingId] = useState<Record<string, string>>({});
+  const [fixedNotice, setFixedNotice] = useState<string | null>(null);
 
   // Live time-of-day clock (updates every 15s)
   const [now, setNow] = useState<Date>(() => new Date());
@@ -190,6 +210,52 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     }
     return legs;
   }, [dayMeetings, settings]);
+
+  // Summary detection of impossible / tight transitions across the day
+  const { impossibleLegs, problemLegs } = useMemo(() => {
+    const orderedLegs: TravelLeg[] = [];
+    for (const m of dayMeetings) {
+      if (travelLegs[m.id]) orderedLegs.push(travelLegs[m.id]);
+    }
+    return {
+      impossibleLegs: orderedLegs.filter(
+        (l) => l.status === 'IMPOSSIBLE' || l.status === 'LATE'
+      ),
+      problemLegs: orderedLegs.filter(
+        (l) => l.status === 'IMPOSSIBLE' || l.status === 'LATE' || l.status === 'TIGHT'
+      ),
+    };
+  }, [dayMeetings, travelLegs]);
+
+  const handleOpenFixSheet = (leg: TravelLeg) => {
+    setActiveFixLeg(leg);
+    setFixDraftType(null);
+    setFixDraftText('');
+    setIsDraftingFix(false);
+    setFixCopied(false);
+  };
+
+  const applyResolvedConfirmation = (meetingId: string, message: string) => {
+    setResolvedByMeetingId((prev) => ({ ...prev, [meetingId]: message }));
+    setFixedNotice(message);
+    setActiveFixLeg(null);
+  };
+
+  const handleScrollToFirstProblem = () => {
+    const targetLeg = impossibleLegs[0] || problemLegs[0];
+    if (!targetLeg) return;
+    const targetId = targetLeg.toMeeting.id;
+    const isInPassed = passedMeetings.some((m) => m.id === targetId);
+    if (isInPassed && !showPassedDropdown) {
+      setShowPassedDropdown(true);
+    }
+    setTimeout(() => {
+      const el =
+        document.getElementById(`transition-problem-${targetId}`) ||
+        document.getElementById(`meeting-block-${targetId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  };
 
   // Track previous physical building for every meeting (for direct Google Maps links)
   const prevPhysicalBuildingById = useMemo(() => {
@@ -338,6 +404,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   const renderPassedBlock = (meeting: CampusMeeting) => {
     const format = meeting.format || (meeting.isOnline ? 'online' : 'in_person');
     const isOnline = format === 'online' || meeting.isOnline;
+    const incomingLeg = travelLegs[meeting.id];
+    const isResolved = Boolean(resolvedByMeetingId[meeting.id]);
+    const isLateLeg =
+      incomingLeg && (incomingLeg.status === 'IMPOSSIBLE' || incomingLeg.status === 'LATE');
+    const isTightLeg = incomingLeg && incomingLeg.status === 'TIGHT';
+    const showTransitionRow = Boolean(incomingLeg && (isLateLeg || isTightLeg || isResolved)) || (isResolved && !incomingLeg);
+
     const mapsUrl = !isOnline
       ? getGoogleMapsDirectionsUrl(
           prevPhysicalBuildingById[meeting.id],
@@ -347,15 +420,92 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       : '';
 
     return (
-      <div
-        className={`px-3.5 py-2.5 rounded-xl border bg-white/80 dark:bg-neutral-900/70 border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 opacity-80 ${
-          format === 'online'
-            ? 'border-l-4 border-l-emerald-500'
-            : format === 'hybrid'
-            ? 'border-l-4 border-l-indigo-500'
-            : 'border-l-4 border-l-blue-600'
-        }`}
-      >
+      <div className="space-y-1.5" id={`meeting-block-${meeting.id}`}>
+        {showTransitionRow && (
+          <div
+            id={`transition-problem-${meeting.id}`}
+            className={`rounded-xl border border-dashed px-3 py-2 flex items-center justify-between gap-2 text-xs ${
+              isLateLeg
+                ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
+                : isTightLeg
+                ? 'bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200'
+                : 'bg-emerald-50/90 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {isLateLeg || isTightLeg ? (
+                <Footprints
+                  className={`w-3.5 h-3.5 shrink-0 ${
+                    isLateLeg ? 'text-rose-600' : 'text-amber-600'
+                  }`}
+                />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+              )}
+              <span className="font-bold truncate">
+                {incomingLeg
+                  ? `${incomingLeg.fromMeeting.buildingCode} → ${incomingLeg.toMeeting.buildingCode} · ${incomingLeg.questFlowTravelMinutes}m walk`
+                  : resolvedByMeetingId[meeting.id]}
+              </span>
+              {isLateLeg && (
+                <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                  Late
+                </span>
+              )}
+              {isTightLeg && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-extrabold uppercase shrink-0">
+                  Tight
+                </span>
+              )}
+              {!isLateLeg && !isTightLeg && isResolved && (
+                <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                  Fixed
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {incomingLeg && (isLateLeg || isTightLeg) && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenFixSheet(incomingLeg)}
+                  className={`px-2.5 py-1 rounded-lg text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer ${
+                    isLateLeg
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  Fix this
+                </button>
+              )}
+              {incomingLeg && (
+                <a
+                  href={getGoogleMapsDirectionsUrl(
+                    incomingLeg.fromMeeting.buildingCode,
+                    incomingLeg.toMeeting.buildingCode,
+                    'walking'
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors"
+                >
+                  <Navigation className="w-3 h-3" />
+                  <span>Route</span>
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div
+          className={`px-3.5 py-2.5 rounded-xl border bg-white/80 dark:bg-neutral-900/70 border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 opacity-80 ${
+            format === 'online'
+              ? 'border-l-4 border-l-emerald-500'
+              : format === 'hybrid'
+              ? 'border-l-4 border-l-indigo-500'
+              : 'border-l-4 border-l-blue-600'
+          }`}
+        >
         <div className="flex items-center gap-3 min-w-0">
           <div className="text-xs font-bold text-neutral-500 dark:text-neutral-400 tabular-nums shrink-0 w-32">
             {formatTime12h(meeting.startTime)} – {formatTime12h(meeting.endTime)}
@@ -439,7 +589,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           )}
         </div>
       </div>
-    );
+    </div>
+  );
   };
 
   const showNowLine =
@@ -452,7 +603,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6 animate-in fade-in duration-200">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 pb-3 border-b border-neutral-200 dark:border-neutral-800">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white">
             Your Calendar
           </h1>
@@ -470,6 +621,32 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               Jump to Today
             </button>
           )}
+
+          {dayMeetings.length > 0 && (
+            impossibleLegs.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleScrollToFirstProblem}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-800 dark:text-rose-200 transition-colors cursor-pointer"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span>
+                  {impossibleLegs.length} back-to-back{impossibleLegs.length === 1 ? '' : 's'} you can&apos;t make
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={problemLegs.length > 0 ? handleScrollToFirstProblem : undefined}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 transition-colors ${
+                  problemLegs.length > 0 ? ' cursor-pointer hover:bg-emerald-100' : 'cursor-default'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>All meetings reachable</span>
+              </button>
+            )
+          )}
         </div>
 
         <button
@@ -481,6 +658,24 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           <span>Add Meeting</span>
         </button>
       </div>
+
+      {/* Fixed Confirmation Notice */}
+      {fixedNotice && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-semibold">Fixed · {fixedNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFixedNotice(null)}
+            className="p-1 rounded-lg text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors cursor-pointer"
+            aria-label="Dismiss notice"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Prominent Written-Out Date & Filter Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -735,29 +930,37 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   const heightPx = Math.max(30, gapMin * PIXELS_PER_MIN - 4);
                   const isLate = leg.status === 'IMPOSSIBLE' || leg.status === 'LATE';
                   const isTight = leg.status === 'TIGHT';
+                  const isResolved = !isLate && !isTight && Boolean(resolvedByMeetingId[leg.toMeeting.id]);
 
                   return (
                     <div
                       key={leg.id}
+                      id={`transition-problem-${leg.toMeeting.id}`}
                       className={`absolute left-2.5 right-2.5 rounded-xl border border-dashed px-3 flex items-center justify-between gap-2 z-10 ${
                         isLate
                           ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
                           : isTight
                           ? 'bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200'
+                          : isResolved
+                          ? 'bg-emerald-50/90 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200'
                           : 'bg-blue-50/60 border-blue-200 text-blue-900 dark:bg-blue-950/25 dark:border-blue-800/60 dark:text-blue-200'
                       }`}
                       style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                     >
                       <div className="flex items-center gap-2 min-w-0 text-xs">
-                        <Footprints
-                          className={`w-3.5 h-3.5 shrink-0 ${
-                            isLate
-                              ? 'text-rose-600'
-                              : isTight
-                              ? 'text-amber-600'
-                              : 'text-blue-600 dark:text-blue-400'
-                          }`}
-                        />
+                        {isResolved ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                        ) : (
+                          <Footprints
+                            className={`w-3.5 h-3.5 shrink-0 ${
+                              isLate
+                                ? 'text-rose-600'
+                                : isTight
+                                ? 'text-amber-600'
+                                : 'text-blue-600 dark:text-blue-400'
+                            }`}
+                          />
+                        )}
                         <span className="font-bold truncate">
                           {leg.fromMeeting.buildingCode} → {leg.toMeeting.buildingCode} ·{' '}
                           {leg.questFlowTravelMinutes}m walk
@@ -772,23 +975,43 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             Tight
                           </span>
                         )}
+                        {isResolved && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                            Fixed
+                          </span>
+                        )}
                       </div>
 
-                      <a
-                        href={getGoogleMapsDirectionsUrl(
-                          leg.fromMeeting.buildingCode,
-                          leg.toMeeting.buildingCode,
-                          'walking'
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(isLate || isTight) && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFixSheet(leg)}
+                            className={`px-2.5 py-1 rounded-lg text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer ${
+                              isLate
+                                ? 'bg-rose-600 hover:bg-rose-700'
+                                : 'bg-amber-600 hover:bg-amber-700'
+                            }`}
+                          >
+                            Fix this
+                          </button>
                         )}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors shrink-0"
-                        title="Open walking directions in Google Maps"
-                      >
-                        <Navigation className="w-3 h-3" />
-                        <span>Route</span>
-                        <ExternalLink className="w-2.5 h-2.5 opacity-75" />
-                      </a>
+                        <a
+                          href={getGoogleMapsDirectionsUrl(
+                            leg.fromMeeting.buildingCode,
+                            leg.toMeeting.buildingCode,
+                            'walking'
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors shrink-0"
+                          title="Open walking directions in Google Maps"
+                        >
+                          <Navigation className="w-3 h-3" />
+                          <span>Route</span>
+                          <ExternalLink className="w-2.5 h-2.5 opacity-75" />
+                        </a>
+                      </div>
                     </div>
                   );
                 })}
@@ -813,6 +1036,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     (incomingLeg.status === 'IMPOSSIBLE' ||
                       incomingLeg.status === 'LATE' ||
                       incomingLeg.status === 'TIGHT');
+                  const isInlineResolved =
+                    Boolean(resolvedByMeetingId[meeting.id]) &&
+                    (!incomingLeg || incomingLeg.gapMinutes < 18);
 
                   const mapsUrl = !isOnline
                     ? getGoogleMapsDirectionsUrl(
@@ -828,6 +1054,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   return (
                     <div
                       key={meeting.id}
+                      id={`meeting-block-${meeting.id}`}
                       onClick={() => onEditMeeting(meeting)}
                       className={`absolute rounded-xl border shadow-xs transition-all cursor-pointer overflow-hidden flex flex-col justify-between z-10 ${
                         isInProgress
@@ -853,7 +1080,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <h3 className="text-xs sm:text-sm font-extrabold text-neutral-900 dark:text-white truncate leading-tight">
                               {meeting.title}
                             </h3>
@@ -865,12 +1092,35 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             )}
                             {showInlineTransitWarning && incomingLeg && (
                               <span
-                                className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold uppercase shrink-0 ${
-                                  incomingLeg.status === 'TIGHT' ? 'bg-amber-500' : 'bg-rose-600'
-                                }`}
+                                id={`transition-problem-${meeting.id}`}
+                                className="inline-flex items-center gap-1 shrink-0"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {incomingLeg.status === 'TIGHT' ? 'Tight' : 'Late'} ·{' '}
-                                {incomingLeg.questFlowTravelMinutes}m walk
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold uppercase ${
+                                    incomingLeg.status === 'TIGHT' ? 'bg-amber-500' : 'bg-rose-600'
+                                  }`}
+                                >
+                                  {incomingLeg.status === 'TIGHT' ? 'Tight' : 'Late'} ·{' '}
+                                  {incomingLeg.questFlowTravelMinutes}m walk
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFixSheet(incomingLeg)}
+                                  className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer ${
+                                    incomingLeg.status === 'TIGHT'
+                                      ? 'bg-amber-600 hover:bg-amber-700'
+                                      : 'bg-rose-700 hover:bg-rose-800'
+                                  }`}
+                                >
+                                  Fix this
+                                </button>
+                              </span>
+                            )}
+                            {!showInlineTransitWarning && isInlineResolved && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                <Check className="w-2.5 h-2.5" />
+                                <span>Fixed</span>
                               </span>
                             )}
                           </div>
@@ -1040,6 +1290,275 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Fix Transition Sheet (Bottom sheet on phone, centered dialog on desktop) */}
+      {activeFixLeg && (() => {
+        const from = activeFixLeg.fromMeeting;
+        const to = activeFixLeg.toMeeting;
+        const fromLoc = `${from.buildingCode}${from.roomNumber ? ` ${from.roomNumber}` : ''}`;
+        const toLoc = `${to.buildingCode}${to.roomNumber ? ` ${to.roomNumber}` : ''}`;
+        const isUserCreated = to.source === 'created' || to.source === 'new';
+
+        const toStartMin = parseTimeToMinutes(to.startTime);
+        const toEndMin = parseTimeToMinutes(to.endTime);
+        const toDuration = Math.max(15, toEndMin - toStartMin);
+
+        // Compute earliest reachable start time using slotFinder
+        const otherEvents = dayMeetings.filter((m) => m.id !== to.id);
+        const minNeededMin =
+          parseTimeToMinutes(from.endTime) +
+          activeFixLeg.questFlowTravelMinutes +
+          (settings.arrivalBufferMinutes ?? 5);
+        const preferredQuarter = formatMinutesToTime(Math.ceil(minNeededMin / 15) * 15);
+        const preferredFive = formatMinutesToTime(Math.ceil(minNeededMin / 5) * 5);
+
+        let slots = findAvailableSlots(
+          otherEvents,
+          {
+            buildingCode: to.buildingCode,
+            floor: to.floor || 1,
+            isOnline: false,
+            durationMinutes: toDuration,
+          },
+          settings,
+          '08:00',
+          '18:00',
+          preferredQuarter
+        );
+        if (slots.length === 0) {
+          slots = findAvailableSlots(
+            otherEvents,
+            {
+              buildingCode: to.buildingCode,
+              floor: to.floor || 1,
+              isOnline: false,
+              durationMinutes: toDuration,
+            },
+            settings,
+            '08:00',
+            '18:00',
+            preferredFive
+          );
+        }
+
+        const earliestStart = slots[0]?.startTime || preferredQuarter;
+        const earliestEnd =
+          slots[0]?.endTime ||
+          formatMinutesToTime(parseTimeToMinutes(earliestStart) + toDuration);
+
+        // Leave earlier meeting by time
+        const leaveEarlierBy = formatMinutesToTime(
+          toStartMin -
+            (activeFixLeg.status === 'TIGHT'
+              ? activeFixLeg.questFlowTravelMinutes + activeFixLeg.bufferMinutes
+              : activeFixLeg.questFlowTravelMinutes)
+        );
+
+        const triggerDraft = async (type: 'later_start' | 'join_online') => {
+          setFixDraftType(type);
+          setIsDraftingFix(true);
+          setFixCopied(false);
+
+          const organizer = to.organizer || 'there';
+          const fallbackText =
+            type === 'join_online'
+              ? `Hi ${organizer},\n\nI have back-to-back meetings across campus right before our session (${from.buildingCode} to ${toLoc}) and won't have enough travel time to make it in person by ${to.startTime}.\n\nWould it be alright if I joined via Teams / virtually so we can start promptly? Let me know if that works!`
+              : `Hi ${organizer},\n\nLooking forward to our meeting today. I have a prior commitment ending in ${from.buildingCode} right at ${from.endTime}, and realistic room-to-room walking across campus takes ~${activeFixLeg.questFlowTravelMinutes} minutes.\n\nCould we start a few minutes later at ${earliestStart} so I can get there without cutting into our discussion? Thank you!`;
+
+          setFixDraftText(fallbackText);
+
+          try {
+            const minutesShift = Math.max(
+              10,
+              parseTimeToMinutes(earliestStart) - parseTimeToMinutes(to.startTime)
+            );
+            const res = await fetch('/api/gemini/draft-message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type,
+                fromMeeting: from,
+                toMeeting: to,
+                gapMinutes: activeFixLeg.gapMinutes,
+                travelMinutes: activeFixLeg.questFlowTravelMinutes,
+                minutesLate: minutesShift,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.message) setFixDraftText(data.message);
+            }
+          } catch {
+            // Keep deterministic fallback text
+          } finally {
+            setIsDraftingFix(false);
+          }
+        };
+
+        const handleCopyDraft = async () => {
+          if (!fixDraftText) return;
+          try {
+            await navigator.clipboard.writeText(fixDraftText);
+          } catch {}
+          setFixCopied(true);
+          setTimeout(() => setFixCopied(false), 2500);
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-neutral-950/55 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setActiveFixLeg(null)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="relative w-full sm:max-w-md bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-2xl border-t sm:border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Mobile pull handle */}
+              <div className="pt-2.5 pb-1 flex justify-center sm:hidden">
+                <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+              </div>
+
+              {/* Sheet Header */}
+              <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-extrabold text-neutral-900 dark:text-white leading-snug">
+                    {fromLoc} → {toLoc} needs {activeFixLeg.questFlowTravelMinutes} min. You have{' '}
+                    {activeFixLeg.gapMinutes}.
+                  </h2>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                    {to.title} ({to.startTime}–{to.endTime})
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveFixLeg(null)}
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Options Body */}
+              <div className="p-5 overflow-y-auto space-y-3">
+                {/* 1. Primary Option based on ownership */}
+                {isUserCreated ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaveMeeting?.({
+                        ...to,
+                        startTime: earliestStart,
+                        endTime: earliestEnd,
+                      });
+                      applyResolvedConfirmation(
+                        to.id,
+                        `Moved "${to.title}" to ${earliestStart}–${earliestEnd}`
+                      );
+                    }}
+                    className="w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                  >
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <span>Move to {earliestStart}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => triggerDraft('later_start')}
+                    className="w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                  >
+                    <MessageSquare className="w-4 h-4 shrink-0" />
+                    <span>Ask to start at {earliestStart}</span>
+                  </button>
+                )}
+
+                {/* 2. Always: Join online instead */}
+                <button
+                  type="button"
+                  onClick={() => triggerDraft('join_online')}
+                  className="w-full px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                >
+                  <Video className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Join online instead</span>
+                </button>
+
+                {/* Draft Box when "Ask to start at..." or "Join online instead" is clicked */}
+                {fixDraftType && (
+                  <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 space-y-2.5 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                      <span>
+                        {fixDraftType === 'later_start'
+                          ? `Note proposing ${earliestStart} start`
+                          : 'Note to join online'}
+                      </span>
+                      {isDraftingFix && (
+                        <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Drafting...</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <textarea
+                      rows={4}
+                      value={fixDraftText}
+                      onChange={(e) => setFixDraftText(e.target.value)}
+                      className="w-full p-2.5 text-xs rounded-lg bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyDraft}
+                        className="flex-1 px-3 py-2 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:opacity-90 text-xs font-bold flex items-center justify-center gap-1.5 transition-opacity cursor-pointer"
+                      >
+                        {fixCopied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+
+                      {fixDraftType === 'join_online' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onQuickToggleFormat(to.id, 'online');
+                            applyResolvedConfirmation(
+                              to.id,
+                              `Switched "${to.title}" to Online (Teams)`
+                            );
+                          }}
+                          className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Confirm Online</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Always: Leave earlier meeting by HH:MM (information only) */}
+                <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 flex items-center gap-2.5 text-xs text-neutral-700 dark:text-neutral-300">
+                  <Footprints className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="font-medium">
+                    Leave the earlier meeting by <strong className="font-bold text-neutral-900 dark:text-white">{leaveEarlierBy}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

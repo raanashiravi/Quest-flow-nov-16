@@ -304,6 +304,7 @@ export default function App() {
             onSelectDate={setSelectedDate}
             onAddMeeting={handleOpenNewMeeting}
             onEditMeeting={handleOpenEditMeeting}
+            onSaveMeeting={handleSaveMeeting}
             onDeleteMeeting={handleDeleteMeeting}
             onQuickToggleFormat={handleQuickToggleFormat}
             onOpenNextMeeting={() => setIsNextUpOpen(true)}

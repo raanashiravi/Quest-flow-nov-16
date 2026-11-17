@@ -8,8 +8,9 @@ import { UW_BUILDINGS } from '../data/uwaterlooCampus';
 import {
   parseTimeToMinutes,
   calculateBuildingToBuildingSeconds,
-  formatTime12h,
+  formatMinutesToTime,
 } from '../utils/travelCalculator';
+import { findAvailableSlots, SuggestedSlot } from '../utils/slotFinder';
 import { X, Trash2, AlertTriangle, Check, Building2, Video, Users } from 'lucide-react';
 
 interface MeetingModalProps {
@@ -47,8 +48,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
   // Conflict / travel validation warning
   const [travelWarning, setTravelWarning] = useState<string | null>(null);
+  const [isImpossible, setIsImpossible] = useState<boolean>(false);
+  const [workingSlots, setWorkingSlots] = useState<SuggestedSlot[]>([]);
 
   useEffect(() => {
+    if (!isOpen) return;
+
     if (meetingToEdit) {
       setTitle(meetingToEdit.title);
       setDate(meetingToEdit.date);
@@ -62,22 +67,44 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       setOrganizer(meetingToEdit.organizer || '');
       setNotes(meetingToEdit.notes || '');
     } else {
+      const defaultBldg = 'MC';
+      const defaultRoom = '2018';
+      const defaultFloor = 2;
+      const defaultDuration = 30;
+      const sameDayEvents = existingMeetings.filter((m) => m.date === selectedDate);
+      const initialSlots = findAvailableSlots(
+        sameDayEvents,
+        {
+          buildingCode: defaultBldg,
+          floor: defaultFloor,
+          isOnline: false,
+          durationMinutes: defaultDuration,
+        },
+        settings,
+        '08:00',
+        '18:00'
+      );
+      const prefillStart = initialSlots[0]?.startTime || '11:00';
+      const prefillEnd = initialSlots[0]?.endTime || '11:30';
+
       setTitle('');
       setDate(selectedDate);
-      setStartTime('11:00');
-      setEndTime('11:45');
+      setStartTime(prefillStart);
+      setEndTime(prefillEnd);
       setFormat('in_person');
-      setBuildingCode('MC');
-      setRoomNumber('2018');
-      setFloor(2);
+      setBuildingCode(defaultBldg);
+      setRoomNumber(defaultRoom);
+      setFloor(defaultFloor);
       setOnlineLink('');
       setOrganizer('');
       setNotes('');
     }
     setTravelWarning(null);
+    setIsImpossible(false);
+    setWorkingSlots([]);
   }, [meetingToEdit, selectedDate, isOpen]);
 
-  // Live travel validation
+  // Live travel validation (from previous AND to next meeting) + slot suggestions
   useEffect(() => {
     if (!isOpen) return;
 
@@ -86,17 +113,43 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
     if (endMin <= startMin) {
       setTravelWarning('End time must be after start time.');
+      setIsImpossible(false);
+      setWorkingSlots([]);
       return;
     }
 
-    if (format === 'online') {
-      setTravelWarning(null);
-      return;
-    }
-
+    const durationMinutes = Math.max(15, endMin - startMin);
     const sameDay = existingMeetings.filter(
       (m) => m.date === date && (!meetingToEdit || m.id !== meetingToEdit.id)
     );
+
+    const computeWorkingSlots = () => {
+      const target = {
+        buildingCode: format === 'online' ? 'ONLINE' : buildingCode,
+        floor,
+        isOnline: format === 'online',
+        durationMinutes,
+      };
+      const preferred = formatMinutesToTime(Math.ceil(startMin / 5) * 5);
+      const afterChosen = findAvailableSlots(
+        sameDay,
+        target,
+        settings,
+        '08:00',
+        '18:00',
+        preferred
+      );
+      if (afterChosen.length >= 3) return afterChosen.slice(0, 3);
+      const fromMorning = findAvailableSlots(sameDay, target, settings, '08:00', '18:00');
+      const combined = [...afterChosen];
+      for (const s of fromMorning) {
+        if (combined.length >= 3) break;
+        if (!combined.some((existing) => existing.startTime === s.startTime)) {
+          combined.push(s);
+        }
+      }
+      return combined.slice(0, 3);
+    };
 
     // Check overlap
     const overlapping = sameDay.find((m) => {
@@ -106,15 +159,34 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
     });
 
     if (overlapping) {
-      setTravelWarning(`Time overlaps with "${overlapping.title}" (${overlapping.startTime}–${overlapping.endTime}).`);
+      setTravelWarning(
+        `Time overlaps with "${overlapping.title}" (${overlapping.startTime}–${overlapping.endTime}).`
+      );
+      setIsImpossible(true);
+      setWorkingSlots(computeWorkingSlots());
       return;
     }
 
-    // Check travel from preceding meeting
+    if (format === 'online') {
+      setTravelWarning(null);
+      setIsImpossible(false);
+      setWorkingSlots([]);
+      return;
+    }
+
     const sorted = [...sameDay].sort((a, b) => a.startTime.localeCompare(b.startTime));
     const prior = [...sorted].reverse().find((m) => parseTimeToMinutes(m.endTime) <= startMin);
+    const next = sorted.find((m) => parseTimeToMinutes(m.startTime) >= endMin);
 
-    if (prior && prior.format !== 'online') {
+    const buffer = settings.arrivalBufferMinutes ?? 5;
+    const currentLocLabel = `${buildingCode}${roomNumber.trim() ? ` ${roomNumber.trim()}` : ''}`;
+    const articleFor = (n: number) => (n === 8 || n === 11 || n === 18 ? 'an' : 'a');
+
+    let impossibleMsg: string | null = null;
+    let tightMsg: string | null = null;
+
+    // 1. Check transition from preceding meeting
+    if (prior && prior.format !== 'online' && !prior.isOnline) {
       const priorEnd = parseTimeToMinutes(prior.endTime);
       const gap = startMin - priorEnd;
       const calc = calculateBuildingToBuildingSeconds(
@@ -125,23 +197,74 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         settings
       );
       const neededTravel = calc.totalMinutes;
-      const buffer = settings.arrivalBufferMinutes ?? 5;
+      const priorLocLabel = `${prior.buildingCode}${prior.roomNumber ? ` ${prior.roomNumber}` : ''}`;
 
       if (gap < neededTravel) {
-        setTravelWarning(
-          `Impossible transition from "${prior.title}" in ${prior.buildingCode}: ${gap}m gap is less than the ${neededTravel}m room-to-room walking time.`
-        );
-        return;
+        impossibleMsg = `You can't get from ${priorLocLabel} to ${currentLocLabel} by ${startTime} — it's ${articleFor(
+          neededTravel
+        )} ${neededTravel} min walk and you have ${gap}.`;
       } else if (gap < neededTravel + buffer) {
-        setTravelWarning(
-          `Tight transition: ${gap}m gap leaves only ${gap - neededTravel}m before start (configured arrival buffer is ${buffer}m).`
-        );
-        return;
+        tightMsg = `You can't comfortably get from ${priorLocLabel} to ${currentLocLabel} by ${startTime} — it's ${articleFor(
+          neededTravel
+        )} ${neededTravel} min walk (+${buffer} min buffer) and you have ${gap}.`;
       }
     }
 
+    // 2. Check transition to next meeting
+    if (next && next.format !== 'online' && !next.isOnline) {
+      const nextStart = parseTimeToMinutes(next.startTime);
+      const gap = nextStart - endMin;
+      const calc = calculateBuildingToBuildingSeconds(
+        buildingCode,
+        floor,
+        next.buildingCode,
+        next.floor || 1,
+        settings
+      );
+      const neededTravel = calc.totalMinutes;
+      const nextLocLabel = `${next.buildingCode}${next.roomNumber ? ` ${next.roomNumber}` : ''}`;
+
+      if (gap < neededTravel && !impossibleMsg) {
+        impossibleMsg = `You can't get from ${currentLocLabel} to ${nextLocLabel} by ${next.startTime} — it's ${articleFor(
+          neededTravel
+        )} ${neededTravel} min walk and you have ${gap}.`;
+      } else if (gap < neededTravel + buffer && !impossibleMsg && !tightMsg) {
+        tightMsg = `You can't comfortably get from ${currentLocLabel} to ${nextLocLabel} by ${next.startTime} — it's ${articleFor(
+          neededTravel
+        )} ${neededTravel} min walk (+${buffer} min buffer) and you have ${gap}.`;
+      }
+    }
+
+    if (impossibleMsg) {
+      setTravelWarning(impossibleMsg);
+      setIsImpossible(true);
+      setWorkingSlots(computeWorkingSlots());
+      return;
+    }
+
+    if (tightMsg) {
+      setTravelWarning(tightMsg);
+      setIsImpossible(false);
+      setWorkingSlots(computeWorkingSlots());
+      return;
+    }
+
     setTravelWarning(null);
-  }, [startTime, endTime, format, buildingCode, floor, date, existingMeetings, meetingToEdit, isOpen, settings]);
+    setIsImpossible(false);
+    setWorkingSlots([]);
+  }, [
+    startTime,
+    endTime,
+    format,
+    buildingCode,
+    roomNumber,
+    floor,
+    date,
+    existingMeetings,
+    meetingToEdit,
+    isOpen,
+    settings,
+  ]);
 
   if (!isOpen) return null;
 
@@ -414,9 +537,29 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           {travelWarning && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-amber-950">Schedule Advisory</p>
-                <p className="mt-0.5 text-amber-800 leading-relaxed">{travelWarning}</p>
+              <div className="flex-1 space-y-2">
+                <p className="text-amber-900 font-medium leading-relaxed">{travelWarning}</p>
+
+                {workingSlots.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[11px] font-semibold text-amber-800">
+                      Times that work:
+                    </span>
+                    {workingSlots.map((slot) => (
+                      <button
+                        key={slot.startTime}
+                        type="button"
+                        onClick={() => {
+                          setStartTime(slot.startTime);
+                          setEndTime(slot.endTime);
+                        }}
+                        className="px-2 py-0.5 rounded-md bg-white hover:bg-blue-50 border border-amber-300 hover:border-blue-500 text-slate-900 hover:text-blue-700 font-mono font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                      >
+                        {slot.startTime}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -452,7 +595,13 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
-                <span>{meetingToEdit ? 'Save Changes' : 'Schedule Meeting'}</span>
+                <span>
+                  {isImpossible
+                    ? 'Save anyway'
+                    : meetingToEdit
+                    ? 'Save Changes'
+                    : 'Schedule Meeting'}
+                </span>
               </button>
             </div>
           </div>

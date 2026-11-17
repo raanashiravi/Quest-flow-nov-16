@@ -33,13 +33,17 @@ export function calculateDeterministicTravelMinutes(
     return 0;
   }
 
+  const buffer = settings.arrivalBufferMinutes ?? 5;
+
   // Same building: floor change + 60s find room only
   if (fromBuilding.toUpperCase() === toBuilding.toUpperCase()) {
     const floorDelta = Math.abs((fromFloor || 1) - (toFloor || 1));
     const floorChange = calculateFloorChangeSeconds(floorDelta, settings);
     const totalSec = floorChange.seconds + settings.findRoomSeconds;
     const baseMin = Math.ceil(totalSec / 60);
-    return isSafeTime ? Math.ceil((totalSec * settings.safeTimeMultiplier) / 60) : baseMin;
+    return isSafeTime
+      ? Math.max(Math.ceil((totalSec * settings.safeTimeMultiplier) / 60), baseMin + buffer)
+      : baseMin;
   }
 
   // Cross-building travel
@@ -47,7 +51,7 @@ export function calculateDeterministicTravelMinutes(
   const originDownFloors = Math.max(0, (fromFloor || 1) - 1);
   const originDown = calculateFloorChangeSeconds(originDownFloors, settings);
 
-  const outdoor = getOutdoorWalkEstimate(fromBuilding, toBuilding);
+  const outdoor = getOutdoorWalkEstimate(fromBuilding, toBuilding, settings.walkingSpeed);
   const walkSec = outdoor.minutes * 60;
 
   const destUpFloors = Math.max(0, (toFloor || 1) - 1);
@@ -58,7 +62,9 @@ export function calculateDeterministicTravelMinutes(
   const totalSec = exitSec + originDown.seconds + walkSec + destUp.seconds + findSec;
   const baseMin = Math.ceil(totalSec / 60);
 
-  return isSafeTime ? Math.ceil((totalSec * settings.safeTimeMultiplier) / 60) : baseMin;
+  return isSafeTime
+    ? Math.max(Math.ceil((totalSec * settings.safeTimeMultiplier) / 60), baseMin + buffer)
+    : baseMin;
 }
 
 /**
@@ -118,9 +124,12 @@ export function findAvailableSlots(
       }
     }
 
+    const prevIsOnline = Boolean(prevEvt && (prevEvt.format === 'online' || prevEvt.isOnline));
+    const nextIsOnline = Boolean(nextEvt && (nextEvt.format === 'online' || nextEvt.isOnline));
+
     // Travel from prev event
     let travelBeforeMin = 0;
-    if (prevEvt && !prevEvt.isOnline && !target.isOnline) {
+    if (prevEvt && !prevIsOnline && !target.isOnline) {
       travelBeforeMin = calculateDeterministicTravelMinutes(
         prevEvt.buildingCode,
         prevEvt.floor,
@@ -135,7 +144,7 @@ export function findAvailableSlots(
 
     // Travel to next event
     let travelAfterMin = 0;
-    if (nextEvt && !nextEvt.isOnline && !target.isOnline) {
+    if (nextEvt && !nextIsOnline && !target.isOnline) {
       travelAfterMin = calculateDeterministicTravelMinutes(
         target.buildingCode,
         target.floor,
@@ -150,10 +159,10 @@ export function findAvailableSlots(
 
     // Generate descriptive reason
     let reason = `${formatMinutesToTime(start)}`;
-    if (prevEvt && !prevEvt.isOnline) {
+    if (prevEvt && !prevIsOnline) {
       const gapBefore = start - parseTimeToMinutes(prevEvt.endTime);
       reason = `${formatMinutesToTime(start)} — leaves ${gapBefore} min to walk from ${prevEvt.buildingCode}`;
-    } else if (nextEvt && !nextEvt.isOnline) {
+    } else if (nextEvt && !nextIsOnline) {
       const gapAfter = parseTimeToMinutes(nextEvt.startTime) - end;
       reason = `${formatMinutesToTime(start)} — leaves ${gapAfter} min travel to ${nextEvt.buildingCode}`;
     } else {
@@ -239,8 +248,11 @@ export function validateSlotOrFindEarliest(
     };
   }
 
+  const prevIsOnline = Boolean(prevEvt && (prevEvt.format === 'online' || prevEvt.isOnline));
+  const nextIsOnline = Boolean(nextEvt && (nextEvt.format === 'online' || nextEvt.isOnline));
+
   // Check travel from previous event
-  if (prevEvt && !prevEvt.isOnline && !target.isOnline) {
+  if (prevEvt && !prevIsOnline && !target.isOnline) {
     const safeTravelBefore = calculateDeterministicTravelMinutes(
       prevEvt.buildingCode,
       prevEvt.floor,
@@ -263,7 +275,7 @@ export function validateSlotOrFindEarliest(
   }
 
   // Check travel to next event
-  if (nextEvt && !nextEvt.isOnline && !target.isOnline) {
+  if (nextEvt && !nextIsOnline && !target.isOnline) {
     const safeTravelAfter = calculateDeterministicTravelMinutes(
       target.buildingCode,
       target.floor,
