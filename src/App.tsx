@@ -3,6 +3,8 @@ import {
   CampusMeeting,
   CampusSettings,
   DEFAULT_CAMPUS_SETTINGS,
+  SAMPLE_DEFAULT_OFFICE,
+  UserOffice,
 } from './types';
 import { PageStepper, AppPage } from './components/PageStepper';
 import { WelcomeHeroPage } from './components/pages/WelcomeHeroPage';
@@ -13,7 +15,10 @@ import { MeetingModal } from './components/MeetingModal';
 import { getSampleDayMeetings } from './data/sampleDay';
 import { getTodayLocalDateString } from './utils/icsParser';
 import { playDepartureChime } from './utils/audioChime';
-import { formatTime12h, parseTimeToMinutes, calculateTravelLeg } from './utils/travelCalculator';
+import {
+  formatTime12h,
+  getDepartureForMeeting,
+} from './utils/travelCalculator';
 import { getGoogleMapsDirectionsUrl } from './utils/googleMapsLinks';
 import { Bell, Navigation, X, ExternalLink } from 'lucide-react';
 
@@ -155,12 +160,15 @@ export default function App() {
         .filter((m) => m.date === todayStr && m.format !== 'online')
         .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-      for (let i = 1; i < todayList.length; i++) {
+      for (let i = 0; i < todayList.length; i++) {
         const m = todayList[i];
-        const leg = calculateTravelLeg(todayList[i - 1], m, settings);
-        const departMin = parseTimeToMinutes(leg.departureTime);
-        const travelMin = leg.questFlowTravelMinutes;
-        const originBuildingCode = todayList[i - 1].buildingCode;
+        const prev = i > 0 ? todayList[i - 1] : null;
+        const dep = getDepartureForMeeting(m, prev, settings);
+        if (!dep.hasOrigin) continue;
+
+        const departMin = dep.leaveByMinutes;
+        const travelMin = dep.walkMinutes;
+        const originBuildingCode = dep.originBuildingCode;
 
         // Trigger alert within 2-minute window
         if (Math.abs(currentMin - departMin) <= 1) {
@@ -193,6 +201,10 @@ export default function App() {
     setSelectedDate(todayStr);
     const sample = getSampleDayMeetings(todayStr);
     setMeetings(sample);
+    setSettings((prev) => ({
+      ...prev,
+      office: prev.office ?? SAMPLE_DEFAULT_OFFICE,
+    }));
     setCurrentPage('review');
   };
 
@@ -321,8 +333,14 @@ export default function App() {
           <ConnectCalendarPage
             currentMeetings={meetings}
             selectedDate={selectedDate}
-            onSetMeetings={(newMeetings) => {
+            onSetMeetings={(newMeetings, isSample) => {
               setMeetings(newMeetings);
+              if (isSample) {
+                setSettings((prev) => ({
+                  ...prev,
+                  office: prev.office ?? SAMPLE_DEFAULT_OFFICE,
+                }));
+              }
             }}
             onContinue={() => {
               setPreviousPage('connect');
@@ -345,6 +363,9 @@ export default function App() {
             onOpenNextMeeting={() => setIsNextUpOpen(true)}
             onBackToConnect={() => handleSelectPage('connect')}
             settings={settings}
+            onUpdateOffice={(office: UserOffice | null) =>
+              setSettings((prev) => ({ ...prev, office }))
+            }
           />
         )}
       </main>

@@ -82,6 +82,22 @@ export interface NotificationSettings {
   soundAlert: boolean;
 }
 
+export type OfficeReturnThreshold = 30 | 45 | 60 | 'never';
+
+export interface UserOffice {
+  buildingCode: string; // e.g. 'E7'
+  roomNumber: string; // e.g. '2408'
+  floor: number; // e.g. 2
+  returnMinGapMinutes?: OfficeReturnThreshold; // default: 45
+}
+
+export const SAMPLE_DEFAULT_OFFICE: UserOffice = {
+  buildingCode: 'E7',
+  roomNumber: '2408',
+  floor: 2,
+  returnMinGapMinutes: 45,
+};
+
 export interface CampusSettings {
   walkingSpeed: WalkingSpeed; // default 'moderate' (75 m/min)
   arrivalBufferMinutes: number; // default: 5 min before start
@@ -93,6 +109,7 @@ export interface CampusSettings {
   safeTimeMultiplier: number; // default: 1.2
   accessibilityAlwaysElevator: boolean; // default: false
   notifications: NotificationSettings;
+  office?: UserOffice | null;
 }
 
 // Backward-compatible alias
@@ -113,6 +130,7 @@ export const DEFAULT_CAMPUS_SETTINGS: CampusSettings = {
     leadTimeMinutes: 5,
     soundAlert: true,
   },
+  office: null,
 };
 
 export const DEFAULT_QUEST_SETTINGS = DEFAULT_CAMPUS_SETTINGS;

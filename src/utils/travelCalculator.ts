@@ -125,6 +125,196 @@ export function calculateBuildingToBuildingSeconds(
   };
 }
 
+export interface MeetingDepartureInfo {
+  hasOrigin: boolean;
+  originBuildingCode?: string;
+  originRoomNumber?: string;
+  originLabel: string;
+  walkMinutes: number;
+  leaveByMinutes: number;
+  leaveByTime: string;
+  leaveByTime12h: string;
+  isViaOffice: boolean;
+  isOfficeReturnBetweenMeetings: boolean;
+  toOfficeWalkMinutes: number;
+  officeArrivalMinutes: number;
+  officeArrivalTime: string;
+  officeArrivalTime12h: string;
+}
+
+/**
+ * Single helper that decides whether a meeting's walk originates from the previous
+ * meeting or from the user's office (either as the first in-person meeting of the day
+ * or after returning to the office during a gap >= returnMinGapMinutes), and computes
+ * the origin building, walk minutes, and leave-by time.
+ */
+export function getDepartureForMeeting(
+  meeting: CampusMeeting,
+  previousMeeting: CampusMeeting | null | undefined,
+  settings: CampusSettings
+): MeetingDepartureInfo {
+  const isOnline = meeting.format === 'online' || Boolean(meeting.isOnline);
+  if (isOnline || !meeting.buildingCode || meeting.buildingCode === 'ONLINE') {
+    return {
+      hasOrigin: false,
+      originLabel: '',
+      walkMinutes: 0,
+      leaveByMinutes: parseTimeToMinutes(meeting.startTime),
+      leaveByTime: meeting.startTime,
+      leaveByTime12h: formatTime12h(meeting.startTime),
+      isViaOffice: false,
+      isOfficeReturnBetweenMeetings: false,
+      toOfficeWalkMinutes: 0,
+      officeArrivalMinutes: 0,
+      officeArrivalTime: '',
+      officeArrivalTime12h: '',
+    };
+  }
+
+  const bufferMinutes = settings.arrivalBufferMinutes ?? 5;
+  const startMin = parseTimeToMinutes(meeting.startTime);
+  const office = settings.office?.buildingCode ? settings.office : null;
+
+  const hasValidPrev = Boolean(
+    previousMeeting &&
+      previousMeeting.format !== 'online' &&
+      !previousMeeting.isOnline &&
+      previousMeeting.buildingCode &&
+      previousMeeting.buildingCode !== 'ONLINE'
+  );
+
+  // Case 1: First in-person meeting of the day
+  if (!hasValidPrev || !previousMeeting) {
+    if (!office) {
+      return {
+        hasOrigin: false,
+        originLabel: '',
+        walkMinutes: 0,
+        leaveByMinutes: startMin,
+        leaveByTime: meeting.startTime,
+        leaveByTime12h: formatTime12h(meeting.startTime),
+        isViaOffice: false,
+        isOfficeReturnBetweenMeetings: false,
+        toOfficeWalkMinutes: 0,
+        officeArrivalMinutes: 0,
+        officeArrivalTime: '',
+        officeArrivalTime12h: '',
+      };
+    }
+
+    const walkMinutes = calculateBuildingToBuildingSeconds(
+      office.buildingCode,
+      office.floor || 1,
+      meeting.buildingCode,
+      meeting.floor || 1,
+      settings
+    ).totalMinutes;
+
+    const leaveByMinutes = startMin - (walkMinutes + bufferMinutes);
+    const leaveByTime = formatMinutesToTime(leaveByMinutes);
+
+    return {
+      hasOrigin: true,
+      originBuildingCode: office.buildingCode,
+      originRoomNumber: office.roomNumber,
+      originLabel: `office ${office.buildingCode}${
+        office.roomNumber ? ` ${office.roomNumber}` : ''
+      }`,
+      walkMinutes,
+      leaveByMinutes,
+      leaveByTime,
+      leaveByTime12h: formatTime12h(leaveByTime),
+      isViaOffice: true,
+      isOfficeReturnBetweenMeetings: false,
+      toOfficeWalkMinutes: 0,
+      officeArrivalMinutes: 0,
+      officeArrivalTime: '',
+      officeArrivalTime12h: '',
+    };
+  }
+
+  // Case 2: Has a preceding in-person meeting
+  const prevEndMin = parseTimeToMinutes(previousMeeting.endTime);
+  const gapMinutes = startMin - prevEndMin;
+  const threshold = office ? (office.returnMinGapMinutes ?? 45) : 'never';
+  const returnsToOffice = Boolean(
+    office && threshold !== 'never' && gapMinutes >= threshold
+  );
+
+  if (returnsToOffice && office) {
+    const toOfficeWalkMinutes = calculateBuildingToBuildingSeconds(
+      previousMeeting.buildingCode,
+      previousMeeting.floor || 1,
+      office.buildingCode,
+      office.floor || 1,
+      settings
+    ).totalMinutes;
+
+    const walkMinutes = calculateBuildingToBuildingSeconds(
+      office.buildingCode,
+      office.floor || 1,
+      meeting.buildingCode,
+      meeting.floor || 1,
+      settings
+    ).totalMinutes;
+
+    const officeArrivalMinutes = prevEndMin + toOfficeWalkMinutes;
+    const officeArrivalTime = formatMinutesToTime(officeArrivalMinutes);
+    const leaveByMinutes = startMin - (walkMinutes + bufferMinutes);
+    const leaveByTime = formatMinutesToTime(leaveByMinutes);
+
+    return {
+      hasOrigin: true,
+      originBuildingCode: office.buildingCode,
+      originRoomNumber: office.roomNumber,
+      originLabel: `office ${office.buildingCode}${
+        office.roomNumber ? ` ${office.roomNumber}` : ''
+      }`,
+      walkMinutes,
+      leaveByMinutes,
+      leaveByTime,
+      leaveByTime12h: formatTime12h(leaveByTime),
+      isViaOffice: true,
+      isOfficeReturnBetweenMeetings: true,
+      toOfficeWalkMinutes,
+      officeArrivalMinutes,
+      officeArrivalTime,
+      officeArrivalTime12h: formatTime12h(officeArrivalTime),
+    };
+  }
+
+  // Direct walk from previousMeeting to meeting
+  const walkMinutes = calculateBuildingToBuildingSeconds(
+    previousMeeting.buildingCode,
+    previousMeeting.floor || 1,
+    meeting.buildingCode,
+    meeting.floor || 1,
+    settings
+  ).totalMinutes;
+
+  const leaveByMinutes = startMin - (walkMinutes + bufferMinutes);
+  const leaveByTime = formatMinutesToTime(leaveByMinutes);
+
+  return {
+    hasOrigin: true,
+    originBuildingCode: previousMeeting.buildingCode,
+    originRoomNumber: previousMeeting.roomNumber,
+    originLabel: `${previousMeeting.buildingCode}${
+      previousMeeting.roomNumber ? ` ${previousMeeting.roomNumber}` : ''
+    }`,
+    walkMinutes,
+    leaveByMinutes,
+    leaveByTime,
+    leaveByTime12h: formatTime12h(leaveByTime),
+    isViaOffice: false,
+    isOfficeReturnBetweenMeetings: false,
+    toOfficeWalkMinutes: 0,
+    officeArrivalMinutes: 0,
+    officeArrivalTime: '',
+    officeArrivalTime12h: '',
+  };
+}
+
 /**
  * Calculates deterministic travel leg between two consecutive meetings.
  * Integrates:
@@ -198,15 +388,21 @@ export function calculateTravelLeg(
     Boolean(toMeeting.buildingCode) &&
     fromMeeting.buildingCode.toUpperCase() === toMeeting.buildingCode.toUpperCase();
 
-  let totalTravelSeconds = 0;
-  let rawWalkMinutes = 0;
+  const b2b = calculateBuildingToBuildingSeconds(
+    fromMeeting.buildingCode,
+    fromMeeting.floor || 1,
+    toMeeting.buildingCode,
+    toMeeting.floor || 1,
+    settings
+  );
+  const totalTravelSeconds = b2b.totalSeconds;
+  const totalTravelMinutes = b2b.totalMinutes;
+  const rawWalkMinutes = b2b.rawWalkMinutes;
   let breakdown: TravelBreakdown;
 
   if (isSameBuilding) {
     const floorDelta = Math.abs((fromMeeting.floor || 1) - (toMeeting.floor || 1));
     const floorChange = calculateFloorChangeSeconds(floorDelta, settings);
-    totalTravelSeconds = floorChange.seconds + settings.findRoomSeconds;
-    rawWalkMinutes = 0;
 
     const summaryLine =
       floorDelta > 0
@@ -236,32 +432,13 @@ export function calculateTravelLeg(
       summaryLine,
     };
   } else {
-    // Cross-building travel calculation:
-    // 1. Exit room
     const exitRoomSeconds = settings.exitRoomSeconds;
-    // 2. Floors down at origin
     const originFloorsDown = Math.max(0, (fromMeeting.floor || 1) - 1);
     const originFloorDown = calculateFloorChangeSeconds(originFloorsDown, settings);
-    // 3. Outdoor walk between buildings
-    const baseOutdoorEstimate = getOutdoorWalkEstimate(
-      fromMeeting.buildingCode,
-      toMeeting.buildingCode,
-      settings.walkingSpeed
-    );
-    rawWalkMinutes = baseOutdoorEstimate.minutes;
     const rawWalkSeconds = rawWalkMinutes * 60;
-    // 4. Floors up at destination
     const destFloorsUp = Math.max(0, (toMeeting.floor || 1) - 1);
     const destFloorUp = calculateFloorChangeSeconds(destFloorsUp, settings);
-    // 5. Find room at destination
     const findRoomSeconds = settings.findRoomSeconds;
-
-    totalTravelSeconds =
-      exitRoomSeconds +
-      originFloorDown.seconds +
-      rawWalkSeconds +
-      destFloorUp.seconds +
-      findRoomSeconds;
 
     const parts: string[] = [];
     parts.push(`Exit ${formatSecondsShort(exitRoomSeconds)}`);
@@ -295,7 +472,6 @@ export function calculateTravelLeg(
     };
   }
 
-  const totalTravelMinutes = Math.ceil(totalTravelSeconds / 60);
   const neededMinutes = totalTravelMinutes + bufferMinutes;
   const safeTimeMinutes = Math.ceil(totalTravelMinutes * settings.safeTimeMultiplier);
 

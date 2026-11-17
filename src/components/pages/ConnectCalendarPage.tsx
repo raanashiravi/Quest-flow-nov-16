@@ -22,7 +22,7 @@ import {
 interface ConnectCalendarPageProps {
   currentMeetings: CampusMeeting[];
   selectedDate: string;
-  onSetMeetings: (meetings: CampusMeeting[]) => void;
+  onSetMeetings: (meetings: CampusMeeting[], isSample?: boolean) => void;
   onContinue: () => void;
   onBack: () => void;
 }
@@ -58,7 +58,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   // 1-Click Load Sample Data
   const handleLoadSample = () => {
     const sample = getSampleDayMeetings(selectedDate);
-    onSetMeetings(sample);
+    onSetMeetings(sample, true);
     setErrorNotice(null);
     setSuccessNotice(`Loaded 5 sample Waterloo meetings for ${selectedDate}.`);
     setTimeout(() => {

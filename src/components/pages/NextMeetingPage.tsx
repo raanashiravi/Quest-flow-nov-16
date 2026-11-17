@@ -18,7 +18,7 @@ import {
   parseTimeToMinutes,
   formatMinutesToTime,
   formatTime12h,
-  calculateTravelLeg,
+  getDepartureForMeeting,
 } from '../../utils/travelCalculator';
 import { UW_BUILDINGS, getOutdoorWalkEstimate } from '../../data/uwaterlooCampus';
 import { getGoogleMapsDirectionsUrl } from '../../utils/googleMapsLinks';
@@ -243,21 +243,11 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
       ? `${destBldg.fullName} (${destCode}${targetMeeting.roomNumber ? ` ${targetMeeting.roomNumber}` : ''})`
       : `${destCode || 'Campus'}${targetMeeting.roomNumber ? ` ${targetMeeting.roomNumber}` : ''}`;
 
-    const hasPrevPhysical = Boolean(previousPhysicalMeeting);
-
-    const originCode = hasPrevPhysical ? previousPhysicalMeeting!.buildingCode : undefined;
-
-    const originLabel = hasPrevPhysical
-      ? `${previousPhysicalMeeting!.buildingCode}${
-          previousPhysicalMeeting!.roomNumber ? ` ${previousPhysicalMeeting!.roomNumber}` : ''
-        }`
-      : '';
-
-    let walkMinutes = 0;
-    if (!isOnline && hasPrevPhysical && previousPhysicalMeeting) {
-      const leg = calculateTravelLeg(previousPhysicalMeeting, targetMeeting, settings);
-      walkMinutes = leg.questFlowTravelMinutes;
-    }
+    const departure = getDepartureForMeeting(targetMeeting, previousPhysicalMeeting, settings);
+    const hasOrigin = departure.hasOrigin;
+    const originCode = departure.originBuildingCode;
+    const originLabel = departure.originLabel;
+    const walkMinutes = departure.walkMinutes;
 
     const outdoorEstimate =
       originCode && destCode
@@ -266,14 +256,14 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
     const sameBuilding = !isOnline && Boolean(originCode) && originCode === destCode;
 
     const driveMinutes =
-      isOnline || !hasPrevPhysical
+      isOnline || !hasOrigin
         ? 0
         : sameBuilding
         ? walkMinutes
         : Math.max(4, Math.round(outdoorEstimate.minutes * 0.4) + 3);
 
     const transitMinutes =
-      isOnline || !hasPrevPhysical
+      isOnline || !hasOrigin
         ? 0
         : sameBuilding
         ? walkMinutes
@@ -288,12 +278,14 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
 
     const bufferMin = settings.arrivalBufferMinutes ?? 5;
     const leaveByTime12h =
-      !isOnline && hasPrevPhysical
-        ? formatTime12h(
-            formatMinutesToTime(
-              parseTimeToMinutes(targetMeeting.startTime) - (activeModeMinutes + bufferMin)
+      !isOnline && hasOrigin
+        ? travelMode === 'walk'
+          ? departure.leaveByTime12h
+          : formatTime12h(
+              formatMinutesToTime(
+                parseTimeToMinutes(targetMeeting.startTime) - (activeModeMinutes + bufferMin)
+              )
             )
-          )
         : null;
 
     const googleMapsUrl = getGoogleMapsDirectionsUrl(originCode, destCode, gmTravelMode);
@@ -386,7 +378,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                     Remote · Join online
                   </p>
                 </>
-              ) : !hasPrevPhysical ? (
+              ) : !hasOrigin ? (
                 <>
                   <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white">
                     First meeting
@@ -409,7 +401,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
           </div>
 
           {/* 3. Mode Selector (Walk / Drive / Transit) or Remote Indicator */}
-          {!isOnline && hasPrevPhysical ? (
+          {!isOnline && hasOrigin ? (
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800">
               <button
                 type="button"
