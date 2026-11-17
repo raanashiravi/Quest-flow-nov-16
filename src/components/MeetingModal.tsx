@@ -71,6 +71,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       const defaultRoom = '2018';
       const defaultFloor = 2;
       const defaultDuration = 30;
+      const now = new Date();
+      const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+        2,
+        '0'
+      )}-${String(now.getDate()).padStart(2, '0')}`;
+
       const sameDayEvents = existingMeetings.filter((m) => m.date === selectedDate);
       const initialSlots = findAvailableSlots(
         sameDayEvents,
@@ -82,13 +88,44 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         },
         settings,
         '08:00',
-        '18:00'
+        '18:00',
+        undefined,
+        selectedDate
       );
-      const prefillStart = initialSlots[0]?.startTime || '11:00';
-      const prefillEnd = initialSlots[0]?.endTime || '11:30';
+
+      let targetFormDate = selectedDate;
+      let prefillStart = initialSlots[0]?.startTime || '11:00';
+      let prefillEnd = initialSlots[0]?.endTime || '11:30';
+
+      if (initialSlots.length === 0 && selectedDate === todayLocalStr) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        const tomorrowStr = `${tomorrow.getFullYear()}-${String(
+          tomorrow.getMonth() + 1
+        ).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+        targetFormDate = tomorrowStr;
+
+        const tomorrowEvents = existingMeetings.filter((m) => m.date === tomorrowStr);
+        const tomorrowSlots = findAvailableSlots(
+          tomorrowEvents,
+          {
+            buildingCode: defaultBldg,
+            floor: defaultFloor,
+            isOnline: false,
+            durationMinutes: defaultDuration,
+          },
+          settings,
+          '08:00',
+          '18:00',
+          undefined,
+          tomorrowStr
+        );
+        prefillStart = tomorrowSlots[0]?.startTime || '08:00';
+        prefillEnd = tomorrowSlots[0]?.endTime || '08:30';
+      }
 
       setTitle('');
-      setDate(selectedDate);
+      setDate(targetFormDate);
       setStartTime(prefillStart);
       setEndTime(prefillEnd);
       setFormat('in_person');
@@ -137,18 +174,11 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         settings,
         '08:00',
         '18:00',
-        preferred
+        preferred,
+        date
       );
-      if (afterChosen.length >= 3) return afterChosen.slice(0, 3);
-      const fromMorning = findAvailableSlots(sameDay, target, settings, '08:00', '18:00');
-      const combined = [...afterChosen];
-      for (const s of fromMorning) {
-        if (combined.length >= 3) break;
-        if (!combined.some((existing) => existing.startTime === s.startTime)) {
-          combined.push(s);
-        }
-      }
-      return combined.slice(0, 3);
+      if (afterChosen.length >= 3) return afterChosen;
+      return findAvailableSlots(sameDay, target, settings, '08:00', '18:00', undefined, date);
     };
 
     // Check overlap
@@ -540,7 +570,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               <div className="flex-1 space-y-2">
                 <p className="text-amber-900 font-medium leading-relaxed">{travelWarning}</p>
 
-                {workingSlots.length > 0 && (
+                {workingSlots.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                     <span className="text-[11px] font-semibold text-amber-800">
                       Times that work:
@@ -559,6 +589,19 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                       </button>
                     ))}
                   </div>
+                ) : (
+                  parseTimeToMinutes(endTime) > parseTimeToMinutes(startTime) &&
+                  (() => {
+                    const now = new Date();
+                    const todayLocalStr = `${now.getFullYear()}-${String(
+                      now.getMonth() + 1
+                    ).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    return date === todayLocalStr ? (
+                      <div className="pt-0.5 text-[11px] font-semibold text-amber-800">
+                        No times left today
+                      </div>
+                    ) : null;
+                  })()
                 )}
               </div>
             </div>

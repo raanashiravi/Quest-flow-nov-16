@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Calendar as CalendarIcon,
   MapPin,
@@ -23,6 +23,7 @@ import {
   X,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
 } from 'lucide-react';
 import { CampusMeeting, CampusSettings, TravelLeg } from '../../types';
 import {
@@ -31,11 +32,33 @@ import {
   formatMinutesToTime,
   formatTime12h,
 } from '../../utils/travelCalculator';
-import { findAvailableSlots } from '../../utils/slotFinder';
+import { findAvailableSlots, SuggestedSlot } from '../../utils/slotFinder';
 import { getTodayLocalDateString } from '../../utils/icsParser';
 import { getGoogleMapsDirectionsUrl } from '../../utils/googleMapsLinks';
 
 const PIXELS_PER_MIN = 2.2; // 132px per hour
+
+function formatTimeCompact(timeStr: string): string {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10) || 0;
+  if (isNaN(h)) return timeStr;
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${m.toString().padStart(2, '0')}`;
+}
+
+interface ProblemPair {
+  id: string;
+  earlier: CampusMeeting;
+  later: CampusMeeting;
+  leg: TravelLeg;
+  isOverlap: boolean;
+  targetMeeting: CampusMeeting;
+  otherMeeting: CampusMeeting;
+  badgeText: string;
+}
 
 function formatWrittenDate(dateStr: string): string {
   if (!dateStr) return '';
@@ -158,9 +181,28 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   const [filterFormat, setFilterFormat] = useState<'all' | 'in_person' | 'online' | 'hybrid'>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showPassedDropdown, setShowPassedDropdown] = useState<boolean>(false);
+  const [openMenuMeetingId, setOpenMenuMeetingId] = useState<string | null>(null);
+
+  // Measure schedule canvas width to detect narrow cards (< ~320px)
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasWidth, setCanvasWidth] = useState<number>(640);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setCanvasWidth(entry.contentRect.width);
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Fix Sheet & Resolved Confirmation State
-  const [activeFixLeg, setActiveFixLeg] = useState<TravelLeg | null>(null);
+  const [activeFixProblem, setActiveFixProblem] = useState<ProblemPair | null>(null);
   const [fixDraftType, setFixDraftType] = useState<'later_start' | 'join_online' | null>(null);
   const [fixDraftText, setFixDraftText] = useState<string>('');
   const [isDraftingFix, setIsDraftingFix] = useState<boolean>(false);
@@ -211,12 +253,59 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     return legs;
   }, [dayMeetings, settings]);
 
-  // Summary detection of impossible / tight transitions across the day
-  const { impossibleLegs, problemLegs } = useMemo(() => {
+  // Build problem pairs & map each problem pair to the single meeting it targets
+  const { impossibleLegs, problemLegs, problemPairs, problemByTargetId } = useMemo(() => {
     const orderedLegs: TravelLeg[] = [];
+    const pairs: ProblemPair[] = [];
+    const byTarget: Record<string, ProblemPair> = {};
+
     for (const m of dayMeetings) {
-      if (travelLegs[m.id]) orderedLegs.push(travelLegs[m.id]);
+      const leg = travelLegs[m.id];
+      if (!leg) continue;
+
+      // On today's date, only count and offer fixes for transitions whose later meeting is still ahead
+      if (isToday && parseTimeToMinutes(leg.toMeeting.startTime) <= currentMinutes) {
+        continue;
+      }
+
+      orderedLegs.push(leg);
+
+      if (leg.status === 'IMPOSSIBLE' || leg.status === 'LATE' || leg.status === 'TIGHT') {
+        const earlier = leg.fromMeeting;
+        const later = leg.toMeeting;
+        const aIsUser = earlier.source === 'created' || earlier.source === 'new';
+        const bIsUser = later.source === 'created' || later.source === 'new';
+
+        // Target selection rule:
+        // - If exactly one of A or B is user-created, target that one
+        // - Otherwise target B
+        const targetMeeting = aIsUser && !bIsUser ? earlier : later;
+        const otherMeeting = targetMeeting.id === earlier.id ? later : earlier;
+        const isOverlap = leg.gapMinutes < 0;
+
+        const badgeText = isOverlap
+          ? `Overlaps ${otherMeeting.title} (${formatTimeCompact(
+              otherMeeting.startTime
+            )}–${formatTimeCompact(otherMeeting.endTime)})`
+          : `${leg.status === 'TIGHT' ? 'Tight' : 'Late'} · ${leg.questFlowTravelMinutes}m walk`;
+
+        const pair: ProblemPair = {
+          id: leg.id,
+          earlier,
+          later,
+          leg,
+          isOverlap,
+          targetMeeting,
+          otherMeeting,
+          badgeText,
+        };
+        pairs.push(pair);
+        if (!byTarget[targetMeeting.id]) {
+          byTarget[targetMeeting.id] = pair;
+        }
+      }
     }
+
     return {
       impossibleLegs: orderedLegs.filter(
         (l) => l.status === 'IMPOSSIBLE' || l.status === 'LATE'
@@ -224,11 +313,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       problemLegs: orderedLegs.filter(
         (l) => l.status === 'IMPOSSIBLE' || l.status === 'LATE' || l.status === 'TIGHT'
       ),
+      problemPairs: pairs,
+      problemByTargetId: byTarget,
     };
-  }, [dayMeetings, travelLegs]);
+  }, [dayMeetings, travelLegs, isToday, currentMinutes]);
 
-  const handleOpenFixSheet = (leg: TravelLeg) => {
-    setActiveFixLeg(leg);
+  const handleOpenFixSheet = (problem: ProblemPair) => {
+    setActiveFixProblem(problem);
     setFixDraftType(null);
     setFixDraftText('');
     setIsDraftingFix(false);
@@ -238,13 +329,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   const applyResolvedConfirmation = (meetingId: string, message: string) => {
     setResolvedByMeetingId((prev) => ({ ...prev, [meetingId]: message }));
     setFixedNotice(message);
-    setActiveFixLeg(null);
+    setActiveFixProblem(null);
   };
 
   const handleScrollToFirstProblem = () => {
-    const targetLeg = impossibleLegs[0] || problemLegs[0];
-    if (!targetLeg) return;
-    const targetId = targetLeg.toMeeting.id;
+    const firstPair = problemPairs[0];
+    if (!firstPair) return;
+    const targetId = firstPair.targetMeeting.id;
     const isInPassed = passedMeetings.some((m) => m.id === targetId);
     if (isInPassed && !showPassedDropdown) {
       setShowPassedDropdown(true);
@@ -260,10 +351,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   // Track previous physical building for every meeting (for direct Google Maps links)
   const prevPhysicalBuildingById = useMemo(() => {
     const map: Record<string, string | undefined> = {};
-    let lastPhysical: string | undefined =
-      settings.mainOffice?.enabled && settings.mainOffice.buildingCode
-        ? settings.mainOffice.buildingCode
-        : undefined;
+    let lastPhysical: string | undefined = undefined;
 
     for (const m of dayMeetings) {
       const isOnline = m.format === 'online' || m.isOnline;
@@ -273,7 +361,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       }
     }
     return map;
-  }, [dayMeetings, settings.mainOffice]);
+  }, [dayMeetings]);
 
   const filteredMeetings = useMemo(
     () =>
@@ -371,13 +459,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       const cur = upcomingMeetings[i];
       const nxt = upcomingMeetings[i + 1];
       const leg = travelLegs[nxt.id];
-      if (!leg) continue;
+      if (!leg || leg.isSameBuilding) continue;
 
       const curEnd = parseTimeToMinutes(cur.endTime);
       const nxtStart = parseTimeToMinutes(nxt.startTime);
       const gapMin = nxtStart - curEnd;
 
-      if (gapMin >= 18) {
+      if (gapMin >= 5) {
         gapLegs.push({
           leg,
           topMin: curEnd,
@@ -405,11 +493,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     const format = meeting.format || (meeting.isOnline ? 'online' : 'in_person');
     const isOnline = format === 'online' || meeting.isOnline;
     const incomingLeg = travelLegs[meeting.id];
+    const targetProblem = isToday ? undefined : problemByTargetId[meeting.id];
     const isResolved = Boolean(resolvedByMeetingId[meeting.id]);
-    const isLateLeg =
-      incomingLeg && (incomingLeg.status === 'IMPOSSIBLE' || incomingLeg.status === 'LATE');
-    const isTightLeg = incomingLeg && incomingLeg.status === 'TIGHT';
-    const showTransitionRow = Boolean(incomingLeg && (isLateLeg || isTightLeg || isResolved)) || (isResolved && !incomingLeg);
+    const isTight = targetProblem?.leg.status === 'TIGHT';
+    const wasLateToday =
+      isToday &&
+      !isResolved &&
+      Boolean(
+        incomingLeg && (incomingLeg.status === 'IMPOSSIBLE' || incomingLeg.status === 'LATE')
+      );
 
     const mapsUrl = !isOnline
       ? getGoogleMapsDirectionsUrl(
@@ -421,82 +513,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
     return (
       <div className="space-y-1.5" id={`meeting-block-${meeting.id}`}>
-        {showTransitionRow && (
-          <div
-            id={`transition-problem-${meeting.id}`}
-            className={`rounded-xl border border-dashed px-3 py-2 flex items-center justify-between gap-2 text-xs ${
-              isLateLeg
-                ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
-                : isTightLeg
-                ? 'bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200'
-                : 'bg-emerald-50/90 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              {isLateLeg || isTightLeg ? (
-                <Footprints
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    isLateLeg ? 'text-rose-600' : 'text-amber-600'
-                  }`}
-                />
-              ) : (
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-              )}
-              <span className="font-bold truncate">
-                {incomingLeg
-                  ? `${incomingLeg.fromMeeting.buildingCode} → ${incomingLeg.toMeeting.buildingCode} · ${incomingLeg.questFlowTravelMinutes}m walk`
-                  : resolvedByMeetingId[meeting.id]}
-              </span>
-              {isLateLeg && (
-                <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold uppercase shrink-0">
-                  Late
-                </span>
-              )}
-              {isTightLeg && (
-                <span className="px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-extrabold uppercase shrink-0">
-                  Tight
-                </span>
-              )}
-              {!isLateLeg && !isTightLeg && isResolved && (
-                <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
-                  Fixed
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              {incomingLeg && (isLateLeg || isTightLeg) && (
-                <button
-                  type="button"
-                  onClick={() => handleOpenFixSheet(incomingLeg)}
-                  className={`px-2.5 py-1 rounded-lg text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer ${
-                    isLateLeg
-                      ? 'bg-rose-600 hover:bg-rose-700'
-                      : 'bg-amber-600 hover:bg-amber-700'
-                  }`}
-                >
-                  Fix this
-                </button>
-              )}
-              {incomingLeg && (
-                <a
-                  href={getGoogleMapsDirectionsUrl(
-                    incomingLeg.fromMeeting.buildingCode,
-                    incomingLeg.toMeeting.buildingCode,
-                    'walking'
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors"
-                >
-                  <Navigation className="w-3 h-3" />
-                  <span>Route</span>
-                </a>
-              )}
-            </div>
-          </div>
-        )}
-
         <div
           className={`px-3.5 py-2.5 rounded-xl border bg-white/80 dark:bg-neutral-900/70 border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 opacity-80 ${
             format === 'online'
@@ -511,9 +527,47 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             {formatTime12h(meeting.startTime)} – {formatTime12h(meeting.endTime)}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs sm:text-sm font-bold text-neutral-700 dark:text-neutral-300 truncate">
-              {meeting.title}
-            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs sm:text-sm font-bold text-neutral-700 dark:text-neutral-300 truncate">
+                {meeting.title}
+              </p>
+              {wasLateToday && (
+                <span className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-semibold shrink-0">
+                  Was late
+                </span>
+              )}
+              {targetProblem && (
+                <span
+                  id={`transition-problem-${meeting.id}`}
+                  className="inline-flex items-center gap-1 shrink-0"
+                >
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold ${
+                      targetProblem.isOverlap ? '' : 'uppercase'
+                    } ${isTight ? 'bg-amber-500' : 'bg-rose-600'}`}
+                  >
+                    {targetProblem.badgeText}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenFixSheet(targetProblem)}
+                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer ${
+                      isTight
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-rose-700 hover:bg-rose-800'
+                    }`}
+                  >
+                    Fix this
+                  </button>
+                </span>
+              )}
+              {!targetProblem && isResolved && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                  <Check className="w-2.5 h-2.5" />
+                  <span>Fixed</span>
+                </span>
+              )}
+            </div>
             <p className="text-[11px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1">
               {!isOnline && meeting.buildingCode ? (
                 <>
@@ -648,15 +702,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             )
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={onAddMeeting}
-          className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl text-sm sm:text-base font-extrabold bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-95 shrink-0"
-        >
-          <Plus className="w-5 h-5 stroke-[2.5]" />
-          <span>Add Meeting</span>
-        </button>
       </div>
 
       {/* Fixed Confirmation Notice */}
@@ -903,7 +948,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               </div>
 
               {/* Right Schedule Canvas */}
-              <div className="flex-1 relative">
+              <div ref={canvasRef} className="flex-1 relative">
                 {/* Hourly & Half-Hour Grid Lines */}
                 {timelineLayout.hours.map((hour, idx) => {
                   const topPx = (hour * 60 - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12;
@@ -926,16 +971,48 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
                 {/* Travel / Walk Gap Blocks */}
                 {timelineLayout.gapLegs.map(({ leg, topMin, gapMin }) => {
-                  const topPx = (topMin - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 14;
-                  const heightPx = Math.max(30, gapMin * PIXELS_PER_MIN - 4);
-                  const isLate = leg.status === 'IMPOSSIBLE' || leg.status === 'LATE';
-                  const isTight = leg.status === 'TIGHT';
-                  const isResolved = !isLate && !isTight && Boolean(resolvedByMeetingId[leg.toMeeting.id]);
+                  const isCompactGap = gapMin < 18;
+                  const topPx = (topMin - timelineLayout.gridStartMin) * PIXELS_PER_MIN + (isCompactGap ? 12 : 14);
+                  const heightPx = isCompactGap
+                    ? Math.max(18, gapMin * PIXELS_PER_MIN - 2)
+                    : Math.max(30, gapMin * PIXELS_PER_MIN - 4);
+                  const isStillAhead =
+                    !isToday || parseTimeToMinutes(leg.toMeeting.startTime) > currentMinutes;
+                  const isLate =
+                    isStillAhead && (leg.status === 'IMPOSSIBLE' || leg.status === 'LATE');
+                  const isTight = isStillAhead && leg.status === 'TIGHT';
+                  const isResolved =
+                    !isLate &&
+                    !isTight &&
+                    (Boolean(resolvedByMeetingId[leg.toMeeting.id]) ||
+                      Boolean(resolvedByMeetingId[leg.fromMeeting.id]));
+
+                  if (isCompactGap) {
+                    return (
+                      <div
+                        key={leg.id}
+                        className={`absolute left-2.5 right-2.5 rounded-lg border border-dashed px-2.5 flex items-center justify-between gap-2 z-10 text-[11px] leading-none ${
+                          isLate
+                            ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
+                            : isTight
+                            ? 'bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200'
+                            : isResolved
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200'
+                            : 'bg-blue-50/60 border-blue-200 text-blue-900 dark:bg-blue-950/25 dark:border-blue-800/60 dark:text-blue-200'
+                        }`}
+                        style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                      >
+                        <span className="font-bold truncate">
+                          🚶 {leg.fromMeeting.buildingCode} → {leg.toMeeting.buildingCode} ·{' '}
+                          {leg.questFlowTravelMinutes}m walk
+                        </span>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
                       key={leg.id}
-                      id={`transition-problem-${leg.toMeeting.id}`}
                       className={`absolute left-2.5 right-2.5 rounded-xl border border-dashed px-3 flex items-center justify-between gap-2 z-10 ${
                         isLate
                           ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
@@ -983,19 +1060,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {(isLate || isTight) && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenFixSheet(leg)}
-                            className={`px-2.5 py-1 rounded-lg text-white text-[11px] font-bold shadow-2xs transition-colors cursor-pointer ${
-                              isLate
-                                ? 'bg-rose-600 hover:bg-rose-700'
-                                : 'bg-amber-600 hover:bg-amber-700'
-                            }`}
-                          >
-                            Fix this
-                          </button>
-                        )}
                         <a
                           href={getGoogleMapsDirectionsUrl(
                             leg.fromMeeting.buildingCode,
@@ -1029,16 +1093,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     isToday && startMin <= currentMinutes && currentMinutes < endMin;
                   const minsLeft = isInProgress ? endMin - currentMinutes : 0;
 
-                  const incomingLeg = travelLegs[meeting.id];
-                  const showInlineTransitWarning =
-                    incomingLeg &&
-                    incomingLeg.gapMinutes < 18 &&
-                    (incomingLeg.status === 'IMPOSSIBLE' ||
-                      incomingLeg.status === 'LATE' ||
-                      incomingLeg.status === 'TIGHT');
+                  const targetProblem = problemByTargetId[meeting.id];
+                  const isTightProblem = targetProblem?.leg.status === 'TIGHT';
                   const isInlineResolved =
-                    Boolean(resolvedByMeetingId[meeting.id]) &&
-                    (!incomingLeg || incomingLeg.gapMinutes < 18);
+                    !targetProblem && Boolean(resolvedByMeetingId[meeting.id]);
 
                   const mapsUrl = !isOnline
                     ? getGoogleMapsDirectionsUrl(
@@ -1050,13 +1108,22 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
                   const widthPct = 100 / totalCols;
                   const leftPct = col * widthPct;
+                  const cardWidthPx = canvasWidth / totalCols - 16;
+                  const isNarrowCard = totalCols > 1 || cardWidthPx < 320;
+                  const isMenuOpen = openMenuMeetingId === meeting.id;
+
+                  const locCompact = isOnline
+                    ? 'Teams'
+                    : `${meeting.buildingCode}${meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}`;
 
                   return (
                     <div
                       key={meeting.id}
                       id={`meeting-block-${meeting.id}`}
                       onClick={() => onEditMeeting(meeting)}
-                      className={`absolute rounded-xl border shadow-xs transition-all cursor-pointer overflow-hidden flex flex-col justify-between z-10 ${
+                      className={`absolute rounded-xl border shadow-xs transition-all cursor-pointer flex flex-col justify-between ${
+                        isMenuOpen ? 'overflow-visible z-30' : 'overflow-hidden z-10'
+                      } ${
                         isInProgress
                           ? 'ring-2 ring-blue-500/30 border-blue-500 dark:border-blue-400'
                           : 'hover:shadow-md'
@@ -1074,167 +1141,301 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         width: `calc(${widthPct}% - 16px)`,
                       }}
                     >
-                      <div
-                        className={`px-3 ${
-                          isCompact ? 'py-1.5 flex items-center justify-between gap-2 h-full' : 'py-2 flex items-start justify-between gap-2'
-                        }`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h3 className="text-xs sm:text-sm font-extrabold text-neutral-900 dark:text-white truncate leading-tight">
-                              {meeting.title}
-                            </h3>
-                            {isInProgress && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-extrabold uppercase shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                                <span>{minsLeft}m left</span>
-                              </span>
-                            )}
-                            {showInlineTransitWarning && incomingLeg && (
-                              <span
-                                id={`transition-problem-${meeting.id}`}
-                                className="inline-flex items-center gap-1 shrink-0"
-                                onClick={(e) => e.stopPropagation()}
-                              >
+                      {isNarrowCard ? (
+                        /* NARROW CARD (< ~320px): 2-line title, 1-line "STC 2018 · 9:30–10:30", status badge, and "⋯" menu */
+                        <div className="px-2.5 py-1.5 flex items-start justify-between gap-1.5 h-full relative">
+                          <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
+                            <div>
+                              <h3 className="text-xs font-extrabold text-neutral-900 dark:text-white line-clamp-2 leading-tight">
+                                {meeting.title}
+                              </h3>
+                              <p className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300 truncate mt-0.5 tabular-nums">
+                                {locCompact} · {formatTimeCompact(meeting.startTime)}–{formatTimeCompact(meeting.endTime)}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 flex-wrap mt-1">
+                              {isInProgress && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                  <span>{minsLeft}m left</span>
+                                </span>
+                              )}
+                              {targetProblem && (
                                 <span
-                                  className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold uppercase ${
-                                    incomingLeg.status === 'TIGHT' ? 'bg-amber-500' : 'bg-rose-600'
-                                  }`}
+                                  id={`transition-problem-${meeting.id}`}
+                                  className="inline-flex items-center gap-1 flex-wrap"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  {incomingLeg.status === 'TIGHT' ? 'Tight' : 'Late'} ·{' '}
-                                  {incomingLeg.questFlowTravelMinutes}m walk
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold truncate max-w-[180px] ${
+                                      targetProblem.isOverlap ? '' : 'uppercase'
+                                    } ${isTightProblem ? 'bg-amber-500' : 'bg-rose-600'}`}
+                                    title={targetProblem.badgeText}
+                                  >
+                                    {targetProblem.badgeText}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenFixSheet(targetProblem)}
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer shrink-0 ${
+                                      isTightProblem
+                                        ? 'bg-amber-600 hover:bg-amber-700'
+                                        : 'bg-rose-700 hover:bg-rose-800'
+                                    }`}
+                                  >
+                                    Fix this
+                                  </button>
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenFixSheet(incomingLeg)}
-                                  className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer ${
-                                    incomingLeg.status === 'TIGHT'
-                                      ? 'bg-amber-600 hover:bg-amber-700'
-                                      : 'bg-rose-700 hover:bg-rose-800'
-                                  }`}
-                                >
-                                  Fix this
-                                </button>
-                              </span>
-                            )}
-                            {!showInlineTransitWarning && isInlineResolved && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
-                                <Check className="w-2.5 h-2.5" />
-                                <span>Fixed</span>
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">
-                            {!isOnline && meeting.buildingCode ? (
-                              <span className="inline-flex items-center gap-1">
-                                <MapPin className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                                <span>
-                                  {meeting.buildingCode}
-                                  {meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}
-                                  {format === 'hybrid' ? ' / Teams' : ''}
+                              )}
+                              {isInlineResolved && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                  <Check className="w-2.5 h-2.5" />
+                                  <span>Fixed</span>
                                 </span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                                <Video className="w-3 h-3 shrink-0" />
-                                <span>Teams</span>
-                              </span>
-                            )}
-                            <span className="text-neutral-400 dark:text-neutral-500">·</span>
-                            <span className="tabular-nums text-neutral-500 dark:text-neutral-400">
-                              {formatDurationBadge(durationMin)} ({formatTime12h(meeting.startTime)} –{' '}
-                              {formatTime12h(meeting.endTime)})
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Block Action Buttons (stopPropagation so clicking them doesn't trigger block edit) */}
-                        <div
-                          className="flex items-center gap-1 shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {!isOnline && meeting.buildingCode && meeting.buildingCode !== 'ONLINE' && (
-                            <a
-                              href={mapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors"
-                              title={`Open ${meeting.buildingCode} in Google Maps`}
-                            >
-                              <Navigation className="w-3 h-3 shrink-0" />
-                              <span className="hidden sm:inline">Maps</span>
-                            </a>
-                          )}
-
-                          {!isCompact && (
-                            <div className="hidden sm:inline-flex rounded-lg border border-neutral-200/80 dark:border-neutral-700 p-0.5 bg-white/80 dark:bg-neutral-900/80 text-[11px] font-semibold">
-                              <button
-                                type="button"
-                                onClick={() => onQuickToggleFormat(meeting.id, 'in_person')}
-                                className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
-                                  format === 'in_person' || format === 'hybrid'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                                }`}
-                              >
-                                Campus
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => onQuickToggleFormat(meeting.id, 'online')}
-                                className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
-                                  format === 'online'
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                                }`}
-                              >
-                                Teams
-                              </button>
+                              )}
                             </div>
-                          )}
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => onEditMeeting(meeting)}
-                            className="p-1 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-                            title="Edit Meeting"
+                          {/* Single "⋯" menu button */}
+                          <div
+                            className="relative shrink-0"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-
-                          {deleteConfirmId === meeting.id ? (
-                            <div className="flex items-center gap-0.5 bg-rose-50 p-0.5 rounded-lg border border-rose-200">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onDeleteMeeting(meeting.id);
-                                  setDeleteConfirmId(null);
-                                }}
-                                className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded cursor-pointer"
-                              >
-                                Del
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteConfirmId(null)}
-                                className="px-1 py-0.5 text-[10px] text-neutral-600 rounded cursor-pointer"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ) : (
                             <button
                               type="button"
-                              onClick={() => setDeleteConfirmId(meeting.id)}
-                              className="p-1 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-                              title="Delete Meeting"
+                              onClick={() =>
+                                setOpenMenuMeetingId(isMenuOpen ? null : meeting.id)
+                              }
+                              aria-label="More actions"
+                              className="p-1 rounded-lg bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-white transition-colors cursor-pointer text-xs font-bold leading-none"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              ⋯
                             </button>
-                          )}
+
+                            {isMenuOpen && (
+                              <div className="absolute right-0 top-7 w-40 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-xl py-1 z-40 text-xs font-semibold">
+                                {!isOnline &&
+                                  meeting.buildingCode &&
+                                  meeting.buildingCode !== 'ONLINE' && (
+                                    <a
+                                      href={mapsUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => setOpenMenuMeetingId(null)}
+                                      className="flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                                    >
+                                      <Navigation className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>Open in Maps</span>
+                                    </a>
+                                  )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onQuickToggleFormat(
+                                      meeting.id,
+                                      isOnline ? 'in_person' : 'online'
+                                    );
+                                    setOpenMenuMeetingId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+                                >
+                                  <Video className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>{isOnline ? 'Switch to Campus' : 'Switch to Teams'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenMenuMeetingId(null);
+                                    onEditMeeting(meeting);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenMenuMeetingId(null);
+                                    onDeleteMeeting(meeting.id);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        /* WIDE CARD (≥ 320px): Unchanged layout */
+                        <div
+                          className={`px-3 ${
+                            isCompact
+                              ? 'py-1.5 flex items-center justify-between gap-2 h-full'
+                              : 'py-2 flex items-start justify-between gap-2'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h3 className="text-xs sm:text-sm font-extrabold text-neutral-900 dark:text-white truncate leading-tight">
+                                {meeting.title}
+                              </h3>
+                              {isInProgress && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                  <span>{minsLeft}m left</span>
+                                </span>
+                              )}
+                              {targetProblem && (
+                                <span
+                                  id={`transition-problem-${meeting.id}`}
+                                  className="inline-flex items-center gap-1 shrink-0"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-white text-[10px] font-extrabold ${
+                                      targetProblem.isOverlap ? '' : 'uppercase'
+                                    } ${isTightProblem ? 'bg-amber-500' : 'bg-rose-600'}`}
+                                  >
+                                    {targetProblem.badgeText}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenFixSheet(targetProblem)}
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer ${
+                                      isTightProblem
+                                        ? 'bg-amber-600 hover:bg-amber-700'
+                                        : 'bg-rose-700 hover:bg-rose-800'
+                                    }`}
+                                  >
+                                    Fix this
+                                  </button>
+                                </span>
+                              )}
+                              {isInlineResolved && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                  <Check className="w-2.5 h-2.5" />
+                                  <span>Fixed</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">
+                              {!isOnline && meeting.buildingCode ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <span>
+                                    {meeting.buildingCode}
+                                    {meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}
+                                    {format === 'hybrid' ? ' / Teams' : ''}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                                  <Video className="w-3 h-3 shrink-0" />
+                                  <span>Teams</span>
+                                </span>
+                              )}
+                              <span className="text-neutral-400 dark:text-neutral-500">·</span>
+                              <span className="tabular-nums text-neutral-500 dark:text-neutral-400">
+                                {formatDurationBadge(durationMin)} ({formatTime12h(meeting.startTime)} –{' '}
+                                {formatTime12h(meeting.endTime)})
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Block Action Buttons (stopPropagation so clicking them doesn't trigger block edit) */}
+                          <div
+                            className="flex items-center gap-1 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {!isOnline &&
+                              meeting.buildingCode &&
+                              meeting.buildingCode !== 'ONLINE' && (
+                                <a
+                                  href={mapsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors"
+                                  title={`Open ${meeting.buildingCode} in Google Maps`}
+                                >
+                                  <Navigation className="w-3 h-3 shrink-0" />
+                                  <span className="hidden sm:inline">Maps</span>
+                                </a>
+                              )}
+
+                            {!isCompact && (
+                              <div className="hidden sm:inline-flex rounded-lg border border-neutral-200/80 dark:border-neutral-700 p-0.5 bg-white/80 dark:bg-neutral-900/80 text-[11px] font-semibold">
+                                <button
+                                  type="button"
+                                  onClick={() => onQuickToggleFormat(meeting.id, 'in_person')}
+                                  className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                                    format === 'in_person' || format === 'hybrid'
+                                      ? 'bg-blue-600 text-white'
+                                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                                  }`}
+                                >
+                                  Campus
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onQuickToggleFormat(meeting.id, 'online')}
+                                  className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                                    format === 'online'
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                                  }`}
+                                >
+                                  Teams
+                                </button>
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => onEditMeeting(meeting)}
+                              className="p-1 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                              title="Edit Meeting"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {deleteConfirmId === meeting.id ? (
+                              <div className="flex items-center gap-0.5 bg-rose-50 p-0.5 rounded-lg border border-rose-200">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onDeleteMeeting(meeting.id);
+                                    setDeleteConfirmId(null);
+                                  }}
+                                  className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded cursor-pointer"
+                                >
+                                  Del
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmId(null)}
+                                  className="px-1 py-0.5 text-[10px] text-neutral-600 rounded cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmId(meeting.id)}
+                                className="p-1 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                                title="Delete Meeting"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1292,95 +1493,104 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       </div>
 
       {/* Fix Transition Sheet (Bottom sheet on phone, centered dialog on desktop) */}
-      {activeFixLeg && (() => {
-        const from = activeFixLeg.fromMeeting;
-        const to = activeFixLeg.toMeeting;
-        const fromLoc = `${from.buildingCode}${from.roomNumber ? ` ${from.roomNumber}` : ''}`;
-        const toLoc = `${to.buildingCode}${to.roomNumber ? ` ${to.roomNumber}` : ''}`;
-        const isUserCreated = to.source === 'created' || to.source === 'new';
+      {activeFixProblem && (() => {
+        const { earlier, later, leg, isOverlap, targetMeeting, otherMeeting } = activeFixProblem;
+        const fromLoc = `${earlier.buildingCode}${earlier.roomNumber ? ` ${earlier.roomNumber}` : ''}`;
+        const toLoc = `${later.buildingCode}${later.roomNumber ? ` ${later.roomNumber}` : ''}`;
+        const targetLoc = `${targetMeeting.buildingCode}${targetMeeting.roomNumber ? ` ${targetMeeting.roomNumber}` : ''}`;
+        const otherLoc = `${otherMeeting.buildingCode}${otherMeeting.roomNumber ? ` ${otherMeeting.roomNumber}` : ''}`;
 
-        const toStartMin = parseTimeToMinutes(to.startTime);
-        const toEndMin = parseTimeToMinutes(to.endTime);
-        const toDuration = Math.max(15, toEndMin - toStartMin);
+        const targetIsUser =
+          targetMeeting.source === 'created' || targetMeeting.source === 'new';
+        const hasTargetStarted =
+          isPastDate || (isToday && parseTimeToMinutes(targetMeeting.startTime) <= currentMinutes);
+        const canDirectMove = targetIsUser && !hasTargetStarted;
 
-        // Compute earliest reachable start time using slotFinder
-        const otherEvents = dayMeetings.filter((m) => m.id !== to.id);
-        const minNeededMin =
-          parseTimeToMinutes(from.endTime) +
-          activeFixLeg.questFlowTravelMinutes +
-          (settings.arrivalBufferMinutes ?? 5);
-        const preferredQuarter = formatMinutesToTime(Math.ceil(minNeededMin / 15) * 15);
-        const preferredFive = formatMinutesToTime(Math.ceil(minNeededMin / 5) * 5);
+        const targetStartMin = parseTimeToMinutes(targetMeeting.startTime);
+        const targetEndMin = parseTimeToMinutes(targetMeeting.endTime);
+        const targetDuration = Math.max(15, targetEndMin - targetStartMin);
 
-        let slots = findAvailableSlots(
+        // Compute up to 3 valid slots using findAvailableSlots from src/utils/slotFinder.ts
+        const otherEvents = dayMeetings.filter((m) => m.id !== targetMeeting.id);
+        const slotTarget = {
+          buildingCode: targetMeeting.buildingCode,
+          floor: targetMeeting.floor || 1,
+          isOnline: false,
+          durationMinutes: targetDuration,
+        };
+
+        const baseMinNeeded = isOverlap
+          ? parseTimeToMinutes(otherMeeting.endTime)
+          : parseTimeToMinutes(earlier.endTime) +
+            leg.questFlowTravelMinutes +
+            (settings.arrivalBufferMinutes ?? 5);
+        const preferredQuarter = formatMinutesToTime(Math.ceil(baseMinNeeded / 15) * 15);
+        const preferredFive = formatMinutesToTime(Math.ceil(baseMinNeeded / 5) * 5);
+
+        const afterConflictSlots = findAvailableSlots(
           otherEvents,
-          {
-            buildingCode: to.buildingCode,
-            floor: to.floor || 1,
-            isOnline: false,
-            durationMinutes: toDuration,
-          },
+          slotTarget,
           settings,
           '08:00',
           '18:00',
-          preferredQuarter
+          preferredFive,
+          selectedDate
         );
-        if (slots.length === 0) {
-          slots = findAvailableSlots(
-            otherEvents,
-            {
-              buildingCode: to.buildingCode,
-              floor: to.floor || 1,
-              isOnline: false,
-              durationMinutes: toDuration,
-            },
-            settings,
-            '08:00',
-            '18:00',
-            preferredFive
-          );
-        }
+        const distinctSlots: SuggestedSlot[] =
+          afterConflictSlots.length >= 3
+            ? afterConflictSlots
+            : findAvailableSlots(
+                otherEvents,
+                slotTarget,
+                settings,
+                '08:00',
+                '18:00',
+                undefined,
+                selectedDate
+              );
 
-        const earliestStart = slots[0]?.startTime || preferredQuarter;
-        const earliestEnd =
-          slots[0]?.endTime ||
-          formatMinutesToTime(parseTimeToMinutes(earliestStart) + toDuration);
+        const earliestStart = distinctSlots[0]?.startTime || preferredQuarter;
 
-        // Leave earlier meeting by time
+        // Leave earlier meeting by time (for non-overlapping walking transitions)
+        const laterStartMin = parseTimeToMinutes(later.startTime);
         const leaveEarlierBy = formatMinutesToTime(
-          toStartMin -
-            (activeFixLeg.status === 'TIGHT'
-              ? activeFixLeg.questFlowTravelMinutes + activeFixLeg.bufferMinutes
-              : activeFixLeg.questFlowTravelMinutes)
+          laterStartMin -
+            (leg.status === 'TIGHT'
+              ? leg.questFlowTravelMinutes + leg.bufferMinutes
+              : leg.questFlowTravelMinutes)
         );
+
+        const sheetTitle = isOverlap
+          ? `${targetIsUser ? `Your meeting (${targetMeeting.title})` : targetMeeting.title} in ${targetLoc} overlaps ${otherMeeting.title} in ${otherLoc}`
+          : `${fromLoc} → ${toLoc} needs ${leg.questFlowTravelMinutes} min. You have ${leg.gapMinutes}.`;
 
         const triggerDraft = async (type: 'later_start' | 'join_online') => {
           setFixDraftType(type);
           setIsDraftingFix(true);
           setFixCopied(false);
 
-          const organizer = to.organizer || 'there';
+          const organizer = later.organizer || targetMeeting.organizer || 'there';
           const fallbackText =
             type === 'join_online'
-              ? `Hi ${organizer},\n\nI have back-to-back meetings across campus right before our session (${from.buildingCode} to ${toLoc}) and won't have enough travel time to make it in person by ${to.startTime}.\n\nWould it be alright if I joined via Teams / virtually so we can start promptly? Let me know if that works!`
-              : `Hi ${organizer},\n\nLooking forward to our meeting today. I have a prior commitment ending in ${from.buildingCode} right at ${from.endTime}, and realistic room-to-room walking across campus takes ~${activeFixLeg.questFlowTravelMinutes} minutes.\n\nCould we start a few minutes later at ${earliestStart} so I can get there without cutting into our discussion? Thank you!`;
+              ? `Hi ${organizer},\n\nI have a back-to-back schedule across campus right around our session (${fromLoc} and ${toLoc}) and won't have enough travel time to make it in person.\n\nWould it be alright if I joined via Teams / virtually so we can start promptly? Let me know if that works!`
+              : `Hi ${organizer},\n\nLooking forward to our meeting today. I have a prior commitment in ${fromLoc} ending at ${earlier.endTime}, and realistic room-to-room walking across campus takes ~${leg.questFlowTravelMinutes} minutes.\n\nCould we start a few minutes later at ${earliestStart} so I can get there without cutting into our discussion? Thank you!`;
 
           setFixDraftText(fallbackText);
 
           try {
             const minutesShift = Math.max(
               10,
-              parseTimeToMinutes(earliestStart) - parseTimeToMinutes(to.startTime)
+              parseTimeToMinutes(earliestStart) - parseTimeToMinutes(later.startTime)
             );
             const res = await fetch('/api/gemini/draft-message', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 type,
-                fromMeeting: from,
-                toMeeting: to,
-                gapMinutes: activeFixLeg.gapMinutes,
-                travelMinutes: activeFixLeg.questFlowTravelMinutes,
+                fromMeeting: earlier,
+                toMeeting: later,
+                gapMinutes: leg.gapMinutes,
+                travelMinutes: leg.questFlowTravelMinutes,
                 minutesLate: minutesShift,
               }),
             });
@@ -1407,7 +1617,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
         return (
           <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-neutral-950/55 backdrop-blur-xs animate-in fade-in duration-150"
-            onClick={() => setActiveFixLeg(null)}
+            onClick={() => setActiveFixProblem(null)}
             role="dialog"
             aria-modal="true"
           >
@@ -1424,16 +1634,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-extrabold text-neutral-900 dark:text-white leading-snug">
-                    {fromLoc} → {toLoc} needs {activeFixLeg.questFlowTravelMinutes} min. You have{' '}
-                    {activeFixLeg.gapMinutes}.
+                    {sheetTitle}
                   </h2>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                    {to.title} ({to.startTime}–{to.endTime})
+                    {earlier.title} ({formatTimeCompact(earlier.startTime)}–{formatTimeCompact(earlier.endTime)}) ·{' '}
+                    {later.title} ({formatTimeCompact(later.startTime)}–{formatTimeCompact(later.endTime)})
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveFixLeg(null)}
+                  onClick={() => setActiveFixProblem(null)}
                   className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
                   aria-label="Close"
                 >
@@ -1443,27 +1653,43 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
               {/* Options Body */}
               <div className="p-5 overflow-y-auto space-y-3">
-                {/* 1. Primary Option based on ownership */}
-                {isUserCreated ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSaveMeeting?.({
-                        ...to,
-                        startTime: earliestStart,
-                        endTime: earliestEnd,
-                      });
-                      applyResolvedConfirmation(
-                        to.id,
-                        `Moved "${to.title}" to ${earliestStart}–${earliestEnd}`
-                      );
-                    }}
-                    className="w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-                  >
-                    <Clock className="w-4 h-4 shrink-0" />
-                    <span>Move to {earliestStart}</span>
-                  </button>
-                ) : (
+                {/* 1. Primary Option: Move user-created meeting (if not already started) OR Ask to start at... */}
+                {canDirectMove ? (
+                  distinctSlots.length > 0 ? (
+                    <div className="p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 dark:text-blue-200">
+                        <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span>Move {targetMeeting.title} to:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {distinctSlots.map((slot) => (
+                          <button
+                            key={slot.startTime}
+                            type="button"
+                            onClick={() => {
+                              onSaveMeeting?.({
+                                ...targetMeeting,
+                                startTime: slot.startTime,
+                                endTime: slot.endTime,
+                              });
+                              applyResolvedConfirmation(
+                                targetMeeting.id,
+                                `Moved "${targetMeeting.title}" to ${slot.startTime}–${slot.endTime}`
+                              );
+                            }}
+                            className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold font-mono shadow-xs transition-all cursor-pointer active:scale-95"
+                          >
+                            {formatTimeCompact(slot.startTime)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : isToday ? (
+                    <div className="p-3.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                      No times left today
+                    </div>
+                  ) : null
+                ) : !targetIsUser ? (
                   <button
                     type="button"
                     onClick={() => triggerDraft('later_start')}
@@ -1472,19 +1698,32 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     <MessageSquare className="w-4 h-4 shrink-0" />
                     <span>Ask to start at {earliestStart}</span>
                   </button>
-                )}
+                ) : null}
 
-                {/* 2. Always: Join online instead */}
-                <button
-                  type="button"
-                  onClick={() => triggerDraft('join_online')}
-                  className="w-full px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-                >
-                  <Video className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Join online instead</span>
-                </button>
+                {/* 2. Secondary Options: Join online instead & Ask the organizer */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => triggerDraft('join_online')}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                  >
+                    <Video className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Join online instead</span>
+                  </button>
 
-                {/* Draft Box when "Ask to start at..." or "Join online instead" is clicked */}
+                  {targetIsUser && (
+                    <button
+                      type="button"
+                      onClick={() => triggerDraft('later_start')}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span>Ask the organizer</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Draft Box when "Ask to start at..." / "Ask the organizer" or "Join online instead" is clicked */}
                 {fixDraftType && (
                   <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 space-y-2.5 animate-in fade-in duration-150">
                     <div className="flex items-center justify-between text-xs font-semibold text-neutral-700 dark:text-neutral-300">
@@ -1531,10 +1770,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            onQuickToggleFormat(to.id, 'online');
+                            onQuickToggleFormat(targetMeeting.id, 'online');
                             applyResolvedConfirmation(
-                              to.id,
-                              `Switched "${to.title}" to Online (Teams)`
+                              targetMeeting.id,
+                              `Switched "${targetMeeting.title}" to Online (Teams)`
                             );
                           }}
                           className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
@@ -1547,13 +1786,18 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   </div>
                 )}
 
-                {/* 3. Always: Leave earlier meeting by HH:MM (information only) */}
-                <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 flex items-center gap-2.5 text-xs text-neutral-700 dark:text-neutral-300">
-                  <Footprints className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span className="font-medium">
-                    Leave the earlier meeting by <strong className="font-bold text-neutral-900 dark:text-white">{leaveEarlierBy}</strong>
-                  </span>
-                </div>
+                {/* 3. Leave earlier meeting by HH:MM (information only, when non-overlapping) */}
+                {!isOverlap && (
+                  <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 flex items-center gap-2.5 text-xs text-neutral-700 dark:text-neutral-300">
+                    <Footprints className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="font-medium">
+                      Leave the earlier meeting by{' '}
+                      <strong className="font-bold text-neutral-900 dark:text-white">
+                        {leaveEarlierBy}
+                      </strong>
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

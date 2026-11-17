@@ -53,16 +53,6 @@ export interface TravelBreakdown {
   summaryLine: string;
 }
 
-export interface OfficeStay {
-  officeBuilding: string;
-  officeRoom: string;
-  arriveOfficeTime: string;
-  leaveOfficeTime: string;
-  stayMinutes: number;
-  toOfficeMinutes: number;
-  fromOfficeMinutes: number;
-}
-
 export interface TravelLeg {
   id: string;
   fromMeeting: CampusMeeting;
@@ -82,25 +72,7 @@ export interface TravelLeg {
   isOnline: boolean;
   mapsWouldFit: boolean;
   breakdown: TravelBreakdown;
-  isViaOffice?: boolean;
-  officeStay?: OfficeStay;
 }
-
-export interface MainOffice {
-  buildingCode: string; // e.g. 'E7'
-  roomNumber: string; // e.g. '2408'
-  floor: number; // auto-derived from roomNumber (e.g. 2)
-  returnThresholdMinutes: number; // if gap >= this (default 45), assume return to main office
-  enabled: boolean;
-}
-
-export const DEFAULT_MAIN_OFFICE: MainOffice = {
-  buildingCode: 'E7',
-  roomNumber: '2408',
-  floor: 2,
-  returnThresholdMinutes: 45,
-  enabled: true,
-};
 
 export type WalkingSpeed = 'brisk' | 'moderate' | 'relaxed';
 
@@ -120,7 +92,6 @@ export interface CampusSettings {
   elevatorSecondsPerFloor: number; // default: 5
   safeTimeMultiplier: number; // default: 1.2
   accessibilityAlwaysElevator: boolean; // default: false
-  mainOffice: MainOffice;
   notifications: NotificationSettings;
 }
 
@@ -137,7 +108,6 @@ export const DEFAULT_CAMPUS_SETTINGS: CampusSettings = {
   elevatorSecondsPerFloor: 5,
   safeTimeMultiplier: 1.2,
   accessibilityAlwaysElevator: false,
-  mainOffice: DEFAULT_MAIN_OFFICE,
   notifications: {
     enabled: true,
     leadTimeMinutes: 5,

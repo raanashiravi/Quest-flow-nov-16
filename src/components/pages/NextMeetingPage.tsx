@@ -19,7 +19,6 @@ import {
   formatMinutesToTime,
   formatTime12h,
   calculateTravelLeg,
-  calculateMeetingDeparture,
 } from '../../utils/travelCalculator';
 import { UW_BUILDINGS, getOutdoorWalkEstimate } from '../../data/uwaterlooCampus';
 import { getGoogleMapsDirectionsUrl } from '../../utils/googleMapsLinks';
@@ -226,7 +225,13 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
       : 'transit';
 
   const renderMeetingCard = (targetMeeting: CampusMeeting, idx: number, isActiveCard: boolean) => {
-    const previousMeeting = idx > 0 ? dayMeetings[idx - 1] : null;
+    const previousPhysicalMeeting =
+      idx > 0
+        ? dayMeetings
+            .slice(0, idx)
+            .reverse()
+            .find((m) => m.format !== 'online' && !m.isOnline && Boolean(m.buildingCode)) || null
+        : null;
     const isOnline = targetMeeting.format === 'online' || targetMeeting.isOnline;
     const destCode = targetMeeting.buildingCode;
     const destBldg = destCode ? UW_BUILDINGS[destCode] : undefined;
@@ -236,52 +241,41 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
       ? `${destBldg.fullName} (${destCode}${targetMeeting.roomNumber ? ` ${targetMeeting.roomNumber}` : ''})`
       : `${destCode || 'Campus'}${targetMeeting.roomNumber ? ` ${targetMeeting.roomNumber}` : ''}`;
 
-    const hasPrevPhysical =
-      previousMeeting &&
-      previousMeeting.format !== 'online' &&
-      !previousMeeting.isOnline &&
-      Boolean(previousMeeting.buildingCode);
+    const hasPrevPhysical = Boolean(previousPhysicalMeeting);
 
-    const originCode = hasPrevPhysical
-      ? previousMeeting!.buildingCode
-      : settings.mainOffice?.enabled && settings.mainOffice.buildingCode
-      ? settings.mainOffice.buildingCode
-      : destCode === 'MC'
-      ? 'NH'
-      : 'MC';
+    const originCode = hasPrevPhysical ? previousPhysicalMeeting!.buildingCode : undefined;
 
     const originLabel = hasPrevPhysical
-      ? `${previousMeeting!.buildingCode}${previousMeeting!.roomNumber ? ` ${previousMeeting!.roomNumber}` : ''}`
-      : settings.mainOffice?.enabled && settings.mainOffice.buildingCode
-      ? `${settings.mainOffice.buildingCode} (Main Office)`
-      : `${originCode} (Campus)`;
+      ? `${previousPhysicalMeeting!.buildingCode}${
+          previousPhysicalMeeting!.roomNumber ? ` ${previousPhysicalMeeting!.roomNumber}` : ''
+        }`
+      : '';
 
     let walkMinutes = 0;
-    if (!isOnline) {
-      if (hasPrevPhysical && previousMeeting) {
-        const leg = calculateTravelLeg(previousMeeting, targetMeeting, settings);
-        walkMinutes = leg.questFlowTravelMinutes;
-      } else {
-        const originFloor = settings.mainOffice?.floor || 1;
-        const dep = calculateMeetingDeparture(targetMeeting, originCode, originFloor, settings);
-        walkMinutes = dep.travelMinutes;
-      }
+    if (!isOnline && hasPrevPhysical && previousPhysicalMeeting) {
+      const leg = calculateTravelLeg(previousPhysicalMeeting, targetMeeting, settings);
+      walkMinutes = leg.questFlowTravelMinutes;
     }
 
-    const outdoorEstimate = getOutdoorWalkEstimate(originCode, destCode, settings.walkingSpeed);
-    const sameBuilding = !isOnline && originCode === destCode;
+    const outdoorEstimate =
+      originCode && destCode
+        ? getOutdoorWalkEstimate(originCode, destCode, settings.walkingSpeed)
+        : { minutes: 0, distanceMeters: 0 };
+    const sameBuilding = !isOnline && Boolean(originCode) && originCode === destCode;
 
-    const driveMinutes = isOnline
-      ? 0
-      : sameBuilding
-      ? walkMinutes
-      : Math.max(4, Math.round(outdoorEstimate.minutes * 0.4) + 3);
+    const driveMinutes =
+      isOnline || !hasPrevPhysical
+        ? 0
+        : sameBuilding
+        ? walkMinutes
+        : Math.max(4, Math.round(outdoorEstimate.minutes * 0.4) + 3);
 
-    const transitMinutes = isOnline
-      ? 0
-      : sameBuilding
-      ? walkMinutes
-      : Math.max(6, Math.round(outdoorEstimate.minutes * 0.6) + 4);
+    const transitMinutes =
+      isOnline || !hasPrevPhysical
+        ? 0
+        : sameBuilding
+        ? walkMinutes
+        : Math.max(6, Math.round(outdoorEstimate.minutes * 0.6) + 4);
 
     const activeModeMinutes =
       travelMode === 'walk'
@@ -291,11 +285,14 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
         : transitMinutes;
 
     const bufferMin = settings.arrivalBufferMinutes ?? 5;
-    const leaveByTime12h = isOnline
-      ? formatTime12h(targetMeeting.startTime)
-      : formatTime12h(
-          formatMinutesToTime(parseTimeToMinutes(targetMeeting.startTime) - (activeModeMinutes + bufferMin))
-        );
+    const leaveByTime12h =
+      !isOnline && hasPrevPhysical
+        ? formatTime12h(
+            formatMinutesToTime(
+              parseTimeToMinutes(targetMeeting.startTime) - (activeModeMinutes + bufferMin)
+            )
+          )
+        : null;
 
     const googleMapsUrl = getGoogleMapsDirectionsUrl(originCode, destCode, gmTravelMode);
 
@@ -363,7 +360,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white tabular-nums">
                 {formatTime12h(targetMeeting.startTime)}
               </p>
-              {!isOnline && (
+              {leaveByTime12h && (
                 <p className="mt-1 text-xs font-semibold text-blue-800 dark:text-blue-300">
                   Leave by {leaveByTime12h}
                 </p>
@@ -387,6 +384,15 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                     Remote · Join online
                   </p>
                 </>
+              ) : !hasPrevPhysical ? (
+                <>
+                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white">
+                    First meeting
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                    No prior campus meeting today
+                  </p>
+                </>
               ) : (
                 <>
                   <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white tabular-nums">
@@ -401,7 +407,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
           </div>
 
           {/* 3. Mode Selector (Walk / Drive / Transit) or Remote Indicator */}
-          {!isOnline ? (
+          {!isOnline && hasPrevPhysical ? (
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800">
               <button
                 type="button"
@@ -440,12 +446,12 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                 <span>Transit ({transitMinutes}m)</span>
               </button>
             </div>
-          ) : (
+          ) : isOnline ? (
             <div className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
               <Laptop className="w-3.5 h-3.5 shrink-0" />
               <span>Virtual session · No campus travel needed</span>
             </div>
-          )}
+          ) : null}
 
           {/* 4. Primary & Secondary Actions */}
           <div className="flex flex-col sm:flex-row gap-3 pt-1 mt-auto">

@@ -82,23 +82,41 @@ export function findAvailableSlots(
   settings: QuestSettings,
   minSearchTime = '08:00',
   maxSearchTime = '18:00',
-  preferredStartTime?: string
+  preferredStartTime?: string,
+  targetDate?: string
 ): SuggestedSlot[] {
   const minMin = parseTimeToMinutes(minSearchTime);
   const maxMin = parseTimeToMinutes(maxSearchTime);
   const preferredMin = preferredStartTime ? parseTimeToMinutes(preferredStartTime) : minMin;
 
+  // For today's date, only return start times at least 10 minutes from now
+  // rounded up to the next :00/:15/:30/:45
+  const now = new Date();
+  const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(now.getDate()).padStart(2, '0')}`;
+  const effectiveDate = targetDate || existingEvents[0]?.date;
+  const isToday = effectiveDate === todayLocalStr;
+  const nowPlus10Quarter = isToday
+    ? Math.ceil((now.getHours() * 60 + now.getMinutes() + 10) / 15) * 15
+    : 0;
+
   const sorted = [...existingEvents].sort(
     (a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
   );
 
-  const validSlots: SuggestedSlot[] = [];
+  const allValidSlots: SuggestedSlot[] = [];
 
-  // Search in 5-minute increments
-  for (let start = Math.max(minMin, preferredMin); start <= maxMin - target.durationMinutes; start += 5) {
+  // Search in 5-minute increments across the window
+  for (
+    let start = Math.max(minMin, preferredMin, nowPlus10Quarter);
+    start <= maxMin - target.durationMinutes;
+    start += 5
+  ) {
     const end = start + target.durationMinutes;
 
-    // Check if slot overlaps any existing event
+    // Check if slot overlaps any existing event (in-person, hybrid, or online)
     const overlaps = sorted.some((e) => {
       const eStart = parseTimeToMinutes(e.startTime);
       const eEnd = parseTimeToMinutes(e.endTime);
@@ -107,69 +125,89 @@ export function findAvailableSlots(
 
     if (overlaps) continue;
 
-    // Find previous event
-    let prevEvt: QuestMeeting | undefined;
+    // Preceding side:
+    // - prevAnyEvt: whichever meeting (in-person, hybrid, or online) ends last before `start`
+    // - prevPhysicalEvt: nearest preceding in-person/hybrid meeting ending before `start`
+    let prevAnyEvt: QuestMeeting | undefined;
+    let prevPhysicalEvt: QuestMeeting | undefined;
     for (const e of sorted) {
-      if (parseTimeToMinutes(e.endTime) <= start) {
-        prevEvt = e;
+      const eEnd = parseTimeToMinutes(e.endTime);
+      if (eEnd <= start) {
+        if (!prevAnyEvt || eEnd >= parseTimeToMinutes(prevAnyEvt.endTime)) {
+          prevAnyEvt = e;
+        }
+        const isOnline = e.format === 'online' || Boolean(e.isOnline);
+        if (!isOnline) {
+          if (!prevPhysicalEvt || eEnd >= parseTimeToMinutes(prevPhysicalEvt.endTime)) {
+            prevPhysicalEvt = e;
+          }
+        }
       }
     }
 
-    // Find next event
-    let nextEvt: QuestMeeting | undefined;
+    // Following side:
+    // - nextAnyEvt: whichever meeting (in-person, hybrid, or online) starts first after `end`
+    // - nextPhysicalEvt: nearest following in-person/hybrid meeting starting after `end`
+    let nextAnyEvt: QuestMeeting | undefined;
+    let nextPhysicalEvt: QuestMeeting | undefined;
     for (const e of sorted) {
-      if (parseTimeToMinutes(e.startTime) >= end) {
-        nextEvt = e;
-        break;
+      const eStart = parseTimeToMinutes(e.startTime);
+      if (eStart >= end) {
+        if (!nextAnyEvt || eStart < parseTimeToMinutes(nextAnyEvt.startTime)) {
+          nextAnyEvt = e;
+        }
+        const isOnline = e.format === 'online' || Boolean(e.isOnline);
+        if (!isOnline) {
+          if (!nextPhysicalEvt || eStart < parseTimeToMinutes(nextPhysicalEvt.startTime)) {
+            nextPhysicalEvt = e;
+          }
+        }
       }
     }
 
-    const prevIsOnline = Boolean(prevEvt && (prevEvt.format === 'online' || prevEvt.isOnline));
-    const nextIsOnline = Boolean(nextEvt && (nextEvt.format === 'online' || nextEvt.isOnline));
-
-    // Travel from prev event
+    // Travel from preceding physical building, starting after the last preceding meeting of any kind ends
     let travelBeforeMin = 0;
-    if (prevEvt && !prevIsOnline && !target.isOnline) {
+    if (prevPhysicalEvt && prevAnyEvt && !target.isOnline) {
       travelBeforeMin = calculateDeterministicTravelMinutes(
-        prevEvt.buildingCode,
-        prevEvt.floor,
+        prevPhysicalEvt.buildingCode,
+        prevPhysicalEvt.floor,
         target.buildingCode,
         target.floor,
         settings,
         true // safe time
       );
-      const gapBefore = start - parseTimeToMinutes(prevEvt.endTime);
+      const gapBefore = start - parseTimeToMinutes(prevAnyEvt.endTime);
       if (gapBefore < travelBeforeMin) continue;
     }
 
-    // Travel to next event
+    // Travel toward following physical building, finishing before the next meeting of any kind starts
     let travelAfterMin = 0;
-    if (nextEvt && !nextIsOnline && !target.isOnline) {
+    if (nextPhysicalEvt && nextAnyEvt && !target.isOnline) {
       travelAfterMin = calculateDeterministicTravelMinutes(
         target.buildingCode,
         target.floor,
-        nextEvt.buildingCode,
-        nextEvt.floor,
+        nextPhysicalEvt.buildingCode,
+        nextPhysicalEvt.floor,
         settings,
         true // safe time
       );
-      const gapAfter = parseTimeToMinutes(nextEvt.startTime) - end;
+      const gapAfter = parseTimeToMinutes(nextAnyEvt.startTime) - end;
       if (gapAfter < travelAfterMin) continue;
     }
 
     // Generate descriptive reason
     let reason = `${formatMinutesToTime(start)}`;
-    if (prevEvt && !prevIsOnline) {
-      const gapBefore = start - parseTimeToMinutes(prevEvt.endTime);
-      reason = `${formatMinutesToTime(start)} — leaves ${gapBefore} min to walk from ${prevEvt.buildingCode}`;
-    } else if (nextEvt && !nextIsOnline) {
-      const gapAfter = parseTimeToMinutes(nextEvt.startTime) - end;
-      reason = `${formatMinutesToTime(start)} — leaves ${gapAfter} min travel to ${nextEvt.buildingCode}`;
+    if (prevPhysicalEvt && prevAnyEvt) {
+      const gapBefore = start - parseTimeToMinutes(prevAnyEvt.endTime);
+      reason = `${formatMinutesToTime(start)} — leaves ${gapBefore} min to walk from ${prevPhysicalEvt.buildingCode}`;
+    } else if (nextPhysicalEvt && nextAnyEvt) {
+      const gapAfter = parseTimeToMinutes(nextAnyEvt.startTime) - end;
+      reason = `${formatMinutesToTime(start)} — leaves ${gapAfter} min travel to ${nextPhysicalEvt.buildingCode}`;
     } else {
       reason = `${formatMinutesToTime(start)} — open calendar window`;
     }
 
-    validSlots.push({
+    allValidSlots.push({
       startTime: formatMinutesToTime(start),
       endTime: formatMinutesToTime(end),
       startMinutes: start,
@@ -177,16 +215,53 @@ export function findAvailableSlots(
       reason,
       travelBeforeMinutes: travelBeforeMin,
       travelAfterMinutes: travelAfterMin,
-      prevMeeting: prevEvt,
-      nextMeeting: nextEvt,
+      prevMeeting: prevPhysicalEvt || prevAnyEvt,
+      nextMeeting: nextPhysicalEvt || nextAnyEvt,
     });
+  }
 
-    if (validSlots.length >= 3) {
-      break;
+  if (allValidSlots.length === 0) {
+    return [];
+  }
+
+  // Group contiguous 5-minute valid slots into separate free windows of the day
+  const windows: SuggestedSlot[][] = [];
+  for (const slot of allValidSlots) {
+    const lastWin = windows[windows.length - 1];
+    if (!lastWin || slot.startMinutes - lastWin[lastWin.length - 1].startMinutes > 5) {
+      windows.push([slot]);
+    } else {
+      lastWin.push(slot);
     }
   }
 
-  return validSlots;
+  const pickEarliestInWindow = (win: SuggestedSlot[]): SuggestedSlot =>
+    win.find((s) => s.startMinutes % 15 === 0) || win[0];
+
+  const pickLatestInWindow = (win: SuggestedSlot[]): SuggestedSlot =>
+    [...win].reverse().find((s) => s.startMinutes % 15 === 0) || win[win.length - 1];
+
+  // 1. Pick the earliest valid start in each separate free window of the day, in time order, up to 3 chips
+  const chosen: SuggestedSlot[] = windows.slice(0, 3).map(pickEarliestInWindow);
+
+  // 2. If fewer than 3 windows exist, add the latest valid start of the largest window,
+  //    provided it is at least 30 min from the other chips
+  if (windows.length < 3 && chosen.length < 3) {
+    const windowsBySize = [...windows].sort((a, b) => b.length - a.length);
+    for (const win of windowsBySize) {
+      if (chosen.length >= 3) break;
+      const latest = pickLatestInWindow(win);
+      const isAtLeast30MinAway = chosen.every(
+        (c) => Math.abs(c.startMinutes - latest.startMinutes) >= 30
+      );
+      if (isAtLeast30MinAway) {
+        chosen.push(latest);
+      }
+    }
+  }
+
+  chosen.sort((a, b) => a.startMinutes - b.startMinutes);
+  return chosen.slice(0, 3);
 }
 
 /**
@@ -209,18 +284,37 @@ export function validateSlotOrFindEarliest(
     (a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
   );
 
-  let prevEvt: QuestMeeting | undefined;
+  let prevAnyEvt: QuestMeeting | undefined;
+  let prevPhysicalEvt: QuestMeeting | undefined;
   for (const e of sorted) {
-    if (parseTimeToMinutes(e.endTime) <= startMin) {
-      prevEvt = e;
+    const eEnd = parseTimeToMinutes(e.endTime);
+    if (eEnd <= startMin) {
+      if (!prevAnyEvt || eEnd >= parseTimeToMinutes(prevAnyEvt.endTime)) {
+        prevAnyEvt = e;
+      }
+      const isOnline = e.format === 'online' || Boolean(e.isOnline);
+      if (!isOnline) {
+        if (!prevPhysicalEvt || eEnd >= parseTimeToMinutes(prevPhysicalEvt.endTime)) {
+          prevPhysicalEvt = e;
+        }
+      }
     }
   }
 
-  let nextEvt: QuestMeeting | undefined;
+  let nextAnyEvt: QuestMeeting | undefined;
+  let nextPhysicalEvt: QuestMeeting | undefined;
   for (const e of sorted) {
-    if (parseTimeToMinutes(e.startTime) >= endMin) {
-      nextEvt = e;
-      break;
+    const eStart = parseTimeToMinutes(e.startTime);
+    if (eStart >= endMin) {
+      if (!nextAnyEvt || eStart < parseTimeToMinutes(nextAnyEvt.startTime)) {
+        nextAnyEvt = e;
+      }
+      const isOnline = e.format === 'online' || Boolean(e.isOnline);
+      if (!isOnline) {
+        if (!nextPhysicalEvt || eStart < parseTimeToMinutes(nextPhysicalEvt.startTime)) {
+          nextPhysicalEvt = e;
+        }
+      }
     }
   }
 
@@ -248,43 +342,40 @@ export function validateSlotOrFindEarliest(
     };
   }
 
-  const prevIsOnline = Boolean(prevEvt && (prevEvt.format === 'online' || prevEvt.isOnline));
-  const nextIsOnline = Boolean(nextEvt && (nextEvt.format === 'online' || nextEvt.isOnline));
-
-  // Check travel from previous event
-  if (prevEvt && !prevIsOnline && !target.isOnline) {
+  // Check travel from previous physical event (starting after last preceding event of any kind ends)
+  if (prevPhysicalEvt && prevAnyEvt && !target.isOnline) {
     const safeTravelBefore = calculateDeterministicTravelMinutes(
-      prevEvt.buildingCode,
-      prevEvt.floor,
+      prevPhysicalEvt.buildingCode,
+      prevPhysicalEvt.floor,
       target.buildingCode,
       target.floor,
       settings,
       true
     );
-    const gapBefore = startMin - parseTimeToMinutes(prevEvt.endTime);
+    const gapBefore = startMin - parseTimeToMinutes(prevAnyEvt.endTime);
 
     if (gapBefore < safeTravelBefore) {
-      const earliestMin = Math.ceil((parseTimeToMinutes(prevEvt.endTime) + safeTravelBefore) / 5) * 5;
+      const earliestMin = Math.ceil((parseTimeToMinutes(prevAnyEvt.endTime) + safeTravelBefore) / 5) * 5;
       const earliest = formatMinutesToTime(earliestMin);
       return {
         isValid: false,
         earliestValidTime: earliest,
-        reason: `Not enough time to walk from ${prevEvt.buildingCode} — earliest that works: ${earliest}`,
+        reason: `Not enough time to walk from ${prevPhysicalEvt.buildingCode} — earliest that works: ${earliest}`,
       };
     }
   }
 
-  // Check travel to next event
-  if (nextEvt && !nextIsOnline && !target.isOnline) {
+  // Check travel to next physical event (finishing before next event of any kind starts)
+  if (nextPhysicalEvt && nextAnyEvt && !target.isOnline) {
     const safeTravelAfter = calculateDeterministicTravelMinutes(
       target.buildingCode,
       target.floor,
-      nextEvt.buildingCode,
-      nextEvt.floor,
+      nextPhysicalEvt.buildingCode,
+      nextPhysicalEvt.floor,
       settings,
       true
     );
-    const gapAfter = parseTimeToMinutes(nextEvt.startTime) - endMin;
+    const gapAfter = parseTimeToMinutes(nextAnyEvt.startTime) - endMin;
 
     if (gapAfter < safeTravelAfter) {
       const suggestions = findAvailableSlots(
@@ -293,13 +384,13 @@ export function validateSlotOrFindEarliest(
         settings,
         '08:00',
         '18:00',
-        nextEvt.endTime
+        nextAnyEvt.endTime
       );
       const earliest = suggestions[0]?.startTime || '12:00';
       return {
         isValid: false,
         earliestValidTime: earliest,
-        reason: `Not enough time to walk to next meeting in ${nextEvt.buildingCode} (${safeTravelAfter} min needed) — next slot that works: ${earliest}`,
+        reason: `Not enough time to walk to next meeting in ${nextPhysicalEvt.buildingCode} (${safeTravelAfter} min needed) — next slot that works: ${earliest}`,
       };
     }
   }

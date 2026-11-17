@@ -21,7 +21,7 @@ export default function App() {
   // Page Stepper navigation state: welcome -> connect -> review
   const [currentPage, setCurrentPage] = useState<AppPage>(() => {
     try {
-      const savedPage = localStorage.getItem('questflow_page_v5');
+      const savedPage = localStorage.getItem('questflow_page_v6');
       if (savedPage && ['welcome', 'connect', 'review'].includes(savedPage)) {
         return savedPage as AppPage;
       }
@@ -38,7 +38,7 @@ export default function App() {
   // Selected date
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem('questflow_date_v5');
+      const saved = localStorage.getItem('questflow_date_v6');
       if (saved) return saved;
     } catch {}
     return getTodayLocalDateString();
@@ -47,7 +47,7 @@ export default function App() {
   // Meetings: user calendar starts empty unless loaded via sample or imported
   const [meetings, setMeetings] = useState<CampusMeeting[]>(() => {
     try {
-      const saved = localStorage.getItem('questflow_meetings_v5');
+      const saved = localStorage.getItem('questflow_meetings_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return parsed;
@@ -59,7 +59,7 @@ export default function App() {
   // Settings
   const [settings, setSettings] = useState<CampusSettings>(() => {
     try {
-      const saved = localStorage.getItem('questflow_settings_v5');
+      const saved = localStorage.getItem('questflow_settings_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return DEFAULT_CAMPUS_SETTINGS;
@@ -82,10 +82,10 @@ export default function App() {
   // Persist to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('questflow_meetings_v5', JSON.stringify(meetings));
-      localStorage.setItem('questflow_date_v5', selectedDate);
-      localStorage.setItem('questflow_settings_v5', JSON.stringify(settings));
-      localStorage.setItem('questflow_page_v5', currentPage);
+      localStorage.setItem('questflow_meetings_v6', JSON.stringify(meetings));
+      localStorage.setItem('questflow_date_v6', selectedDate);
+      localStorage.setItem('questflow_settings_v6', JSON.stringify(settings));
+      localStorage.setItem('questflow_page_v6', currentPage);
     } catch {}
   }, [meetings, selectedDate, settings, currentPage]);
 
@@ -113,24 +113,12 @@ export default function App() {
         .filter((m) => m.date === todayStr && m.format !== 'online')
         .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-      for (let i = 0; i < todayList.length; i++) {
+      for (let i = 1; i < todayList.length; i++) {
         const m = todayList[i];
-        let departMin = 0;
-        let travelMin = 10;
-        let originBuildingCode: string | undefined = settings.mainOffice?.enabled
-          ? settings.mainOffice.buildingCode
-          : undefined;
-
-        if (i === 0) {
-          const startMin = parseTimeToMinutes(m.startTime);
-          travelMin = 14;
-          departMin = startMin - (travelMin + (settings.arrivalBufferMinutes ?? 5));
-        } else {
-          const leg = calculateTravelLeg(todayList[i - 1], m, settings);
-          departMin = parseTimeToMinutes(leg.departureTime);
-          travelMin = leg.questFlowTravelMinutes;
-          originBuildingCode = todayList[i - 1].buildingCode;
-        }
+        const leg = calculateTravelLeg(todayList[i - 1], m, settings);
+        const departMin = parseTimeToMinutes(leg.departureTime);
+        const travelMin = leg.questFlowTravelMinutes;
+        const originBuildingCode = todayList[i - 1].buildingCode;
 
         // Trigger alert within 2-minute window
         if (Math.abs(currentMin - departMin) <= 1) {
