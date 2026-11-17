@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix rana - Waterloo QuestFlow - nov 16",
+  "description": "Smart academic calendar, UWaterloo building navigation with walking buffers, transit arrival countdowns, and AI time management advice for students, staff, and faculty.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
