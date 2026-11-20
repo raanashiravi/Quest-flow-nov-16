@@ -39,12 +39,14 @@ import {
   parseTimeToMinutes,
   formatMinutesToTime,
   formatTime12h,
-  calculateBuildingToBuildingSeconds,
 } from '../../utils/travelCalculator';
 import { UW_BUILDINGS } from '../../data/uwaterlooCampus';
 import { findAvailableSlots, SuggestedSlot } from '../../utils/slotFinder';
 import { getTodayLocalDateString } from '../../utils/icsParser';
-import { getGoogleMapsDirectionsUrl } from '../../utils/googleMapsLinks';
+import {
+  getGoogleMapsBuildingUrl,
+  getGoogleMapsDirectionsUrl,
+} from '../../utils/googleMapsLinks';
 
 const PIXELS_PER_MIN = 2.2; // 132px per hour
 
@@ -465,18 +467,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       startMin,
       leaveByMin: dep.leaveByMinutes,
       leaveBy12h: dep.leaveByTime12h,
-      label: `🚶 From office ${settings.office.buildingCode} → ${firstInPersonMeeting.buildingCode} · ${dep.walkMinutes}m walk · leave by ${dep.leaveByTime12h}`,
+      label: `From office ${settings.office.buildingCode} → ${firstInPersonMeeting.buildingCode} · ${dep.walkMinutes}m walk · leave by ${dep.leaveByTime12h}`,
     };
   }, [settings, firstInPersonMeeting, departureByMeetingId]);
-
-  // Track previous physical building for every meeting (for direct Google Maps links)
-  const prevPhysicalBuildingById = useMemo(() => {
-    const map: Record<string, string | undefined> = {};
-    for (const m of dayMeetings) {
-      map[m.id] = departureByMeetingId[m.id]?.originBuildingCode;
-    }
-    return map;
-  }, [dayMeetings, departureByMeetingId]);
 
   const filteredMeetings = useMemo(
     () =>
@@ -566,7 +559,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
     const gridStartMin = startHour * 60;
     const gridEndMin = endHour * 60;
-    const totalHeight = (gridEndMin - gridStartMin) * PIXELS_PER_MIN;
 
     const hours: number[] = [];
     for (let h = startHour; h <= endHour; h++) {
@@ -578,6 +570,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       leg: TravelLeg;
       topMin: number;
       gapMin: number;
+      isOfficeTrip: boolean;
+      minVisualHeightPx: number;
     }[] = [];
 
     for (let i = 0; i < upcomingMeetings.length - 1; i++) {
@@ -586,20 +580,62 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       const leg = travelLegs[nxt.id];
       const nxtDep = departureByMeetingId[nxt.id];
       if (!leg) continue;
-      if (leg.isSameBuilding && !nxtDep?.isOfficeReturnBetweenMeetings) continue;
 
       const curEnd = parseTimeToMinutes(cur.endTime);
       const nxtStart = parseTimeToMinutes(nxt.startTime);
       const gapMin = nxtStart - curEnd;
 
-      if (gapMin >= 5) {
-        gapLegs.push({
-          leg,
-          topMin: curEnd,
-          gapMin,
-        });
-      }
+      // Never draw a walk row when two meetings overlap in time
+      if (gapMin < 0) continue;
+
+      const isOfficeTrip = Boolean(
+        nxtDep?.isOfficeReturnBetweenMeetings && settings.office?.buildingCode
+      );
+      if (leg.isSameBuilding && !isOfficeTrip) continue;
+
+      const minVisualHeightPx = isOfficeTrip ? 96 : 30;
+      gapLegs.push({
+        leg,
+        topMin: curEnd,
+        gapMin,
+        isOfficeTrip,
+        minVisualHeightPx,
+      });
     }
+
+    // Monotonic push-down offset so walk rows and meeting cards never overlap
+    const getOffsetAtMin = (min: number): number => {
+      let offset = 0;
+      for (const p of positioned) {
+        const naturalCardPx = (p.endMin - p.startMin) * PIXELS_PER_MIN;
+        const extraCardPx = Math.max(0, 54 - naturalCardPx);
+        if (extraCardPx > 0) {
+          if (min >= p.endMin) {
+            offset += extraCardPx;
+          } else if (min > p.startMin) {
+            offset += extraCardPx * ((min - p.startMin) / Math.max(1, p.endMin - p.startMin));
+          }
+        }
+      }
+      for (const g of gapLegs) {
+        const naturalGapPx = Math.max(0, g.gapMin) * PIXELS_PER_MIN;
+        const extraGapPx = Math.max(0, g.minVisualHeightPx - naturalGapPx);
+        if (extraGapPx > 0 && min > g.topMin) {
+          if (g.gapMin <= 0 || min >= g.topMin + g.gapMin) {
+            offset += extraGapPx;
+          } else {
+            offset += extraGapPx * ((min - g.topMin) / g.gapMin);
+          }
+        }
+      }
+      return offset;
+    };
+
+    const getTopPxForMin = (min: number): number =>
+      (min - gridStartMin) * PIXELS_PER_MIN + 12 + getOffsetAtMin(min);
+
+    const totalHeight =
+      (gridEndMin - gridStartMin) * PIXELS_PER_MIN + getOffsetAtMin(gridEndMin);
 
     return {
       positioned,
@@ -611,8 +647,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       totalHeight,
       gapLegs,
       hasOfficeFirstInUpcoming,
+      getTopPxForMin,
     };
-  }, [upcomingMeetings, isToday, currentMinutes, travelLegs, officeFirstWalk, departureByMeetingId]);
+  }, [upcomingMeetings, isToday, currentMinutes, travelLegs, officeFirstWalk, departureByMeetingId, settings.office]);
 
   const writtenDate = formatWrittenDate(selectedDate);
 
@@ -632,11 +669,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       );
 
     const mapsUrl = !isOnline
-      ? getGoogleMapsDirectionsUrl(
-          prevPhysicalBuildingById[meeting.id],
-          meeting.buildingCode,
-          'walking'
-        )
+      ? getGoogleMapsBuildingUrl(meeting.buildingCode)
       : '';
 
     const showOfficeWalkRow =
@@ -646,7 +679,25 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       <div className="space-y-1.5" id={`meeting-block-${meeting.id}`}>
         {showOfficeWalkRow && officeFirstWalk && (
           <div className="px-3 py-1.5 rounded-lg border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 text-[11px] font-bold flex items-center justify-between gap-2">
-            <span className="truncate">{officeFirstWalk.label}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span className="truncate">{officeFirstWalk.label}</span>
+            </div>
+            <a
+              href={getGoogleMapsDirectionsUrl(
+                officeFirstWalk.fromBuildingCode,
+                officeFirstWalk.toBuildingCode,
+                'walking'
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+              title="Open walking directions from office in Google Maps"
+            >
+              <Navigation className="w-2.5 h-2.5" />
+              <span>Route</span>
+              <ExternalLink className="w-2 h-2 opacity-75" />
+            </a>
           </div>
         )}
         <div
@@ -928,6 +979,26 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 placeholder="Room"
                 className="w-16 px-2 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
+              <label className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-300 font-medium">
+                <span>Go back to my office when I have at least</span>
+                <select
+                  aria-label="Go back to my office when I have at least"
+                  value={officeReturnThreshold}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setOfficeReturnThreshold(
+                      val === 'never' ? 'never' : (Number(val) as OfficeReturnThreshold)
+                    );
+                  }}
+                  className="px-1.5 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value={30}>30 min</option>
+                  <option value={45}>45 min</option>
+                  <option value={60}>60 min</option>
+                  <option value="never">Never</option>
+                </select>
+                <span>free</span>
+              </label>
               <button
                 type="submit"
                 className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
@@ -1122,7 +1193,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               {/* Left Hour Axis */}
               <div className="w-14 sm:w-16 shrink-0 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/80 relative select-none">
                 {timelineLayout.hours.map((hour) => {
-                  const topPx = (hour * 60 - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12;
+                  const topPx = timelineLayout.getTopPxForMin(hour * 60);
                   return (
                     <div
                       key={hour}
@@ -1139,7 +1210,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   <div
                     className="absolute right-1 -translate-y-1/2 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold tabular-nums shadow-xs z-20"
                     style={{
-                      top: `${(currentMinutes - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12}px`,
+                      top: `${timelineLayout.getTopPxForMin(currentMinutes)}px`,
                     }}
                   >
                     {currentTimeLabel.replace(/\s?(AM|PM)/, '')}
@@ -1151,7 +1222,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <div ref={canvasRef} className="flex-1 relative">
                 {/* Hourly & Half-Hour Grid Lines */}
                 {timelineLayout.hours.map((hour, idx) => {
-                  const topPx = (hour * 60 - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12;
+                  const topPx = timelineLayout.getTopPxForMin(hour * 60);
+                  const halfHourTopPx = timelineLayout.getTopPxForMin(hour * 60 + 30);
                   const isLast = idx === timelineLayout.hours.length - 1;
                   return (
                     <React.Fragment key={hour}>
@@ -1162,7 +1234,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       {!isLast && (
                         <div
                           className="absolute left-0 right-0 border-t border-dashed border-neutral-100 dark:border-neutral-800/50"
-                          style={{ top: `${topPx + 30 * PIXELS_PER_MIN}px` }}
+                          style={{ top: `${halfHourTopPx}px` }}
                         />
                       )}
                     </React.Fragment>
@@ -1178,14 +1250,18 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       officeFirstWalk.walkMinutes + officeFirstWalk.bufferMinutes
                     );
                     const topMin = officeFirstWalk.startMin - rowSpanMin;
-                    const topPx = (topMin - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12;
-                    const heightPx = Math.max(26, rowSpanMin * PIXELS_PER_MIN - 4);
+                    const topPx = timelineLayout.getTopPxForMin(topMin);
+                    const bottomPx = timelineLayout.getTopPxForMin(officeFirstWalk.startMin);
+                    const heightPx = Math.max(26, bottomPx - topPx - 4);
                     return (
                       <div
                         className="absolute left-2.5 right-2.5 rounded-xl border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 px-3 flex items-center justify-between gap-2 z-10 text-xs"
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                       >
-                        <span className="font-bold truncate">{officeFirstWalk.label}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                          <span className="font-bold truncate">{officeFirstWalk.label}</span>
+                        </div>
                         <a
                           href={getGoogleMapsDirectionsUrl(
                             officeFirstWalk.fromBuildingCode,
@@ -1206,12 +1282,85 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   })()}
 
                 {/* Travel / Walk Gap Blocks */}
-                {timelineLayout.gapLegs.map(({ leg, topMin, gapMin }) => {
+                {timelineLayout.gapLegs.map(({ leg, topMin, gapMin, isOfficeTrip }) => {
+                  const slotTopPx = timelineLayout.getTopPxForMin(topMin);
+                  const slotBottomPx = timelineLayout.getTopPxForMin(topMin + gapMin);
+                  const slotSpanPx = Math.max(28, slotBottomPx - slotTopPx);
+
+                  const nxtDep = departureByMeetingId[leg.toMeeting.id];
+                  if (isOfficeTrip && nxtDep && settings.office?.buildingCode) {
+                    const officeCode = settings.office.buildingCode;
+                    const topPx = slotTopPx + 1;
+                    const heightPx = Math.max(92, slotSpanPx - 4);
+                    return (
+                      <div
+                        key={leg.id}
+                        className="absolute left-2.5 right-2.5 flex flex-col justify-between gap-1 z-10"
+                        style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                      >
+                        {/* 1. Walk to Office */}
+                        <div className="rounded-lg border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <span className="font-bold truncate">
+                              {leg.fromMeeting.buildingCode} → Office {officeCode} · {nxtDep.toOfficeWalkMinutes}m walk
+                            </span>
+                          </div>
+                          <a
+                            href={getGoogleMapsDirectionsUrl(
+                              leg.fromMeeting.buildingCode,
+                              officeCode,
+                              'walking'
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                            title="Open walking directions to office in Google Maps"
+                          >
+                            <Navigation className="w-2.5 h-2.5" />
+                            <span>Route</span>
+                            <ExternalLink className="w-2 h-2 opacity-75" />
+                          </a>
+                        </div>
+
+                        {/* 2. Grey At Your Office Block */}
+                        <div className="flex-1 min-h-[24px] rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-100/90 dark:bg-neutral-800/70 text-neutral-700 dark:text-neutral-200 px-2.5 py-1 flex items-center justify-between gap-2 text-[11px]">
+                          <span className="font-bold truncate">
+                            🏢 At your office · {nxtDep.officeArrivalTime12h} – {nxtDep.leaveByTime12h}
+                          </span>
+                        </div>
+
+                        {/* 3. Walk from Office to Next Meeting */}
+                        <div className="rounded-lg border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <span className="font-bold truncate">
+                              Office {officeCode} → {leg.toMeeting.buildingCode} · {nxtDep.walkMinutes}m walk · leave by {nxtDep.leaveByTime12h}
+                            </span>
+                          </div>
+                          <a
+                            href={getGoogleMapsDirectionsUrl(
+                              officeCode,
+                              leg.toMeeting.buildingCode,
+                              'walking'
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                            title="Open walking directions from office in Google Maps"
+                          >
+                            <Navigation className="w-2.5 h-2.5" />
+                            <span>Route</span>
+                            <ExternalLink className="w-2 h-2 opacity-75" />
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isCompactGap = gapMin < 18;
-                  const topPx = (topMin - timelineLayout.gridStartMin) * PIXELS_PER_MIN + (isCompactGap ? 12 : 14);
-                  const heightPx = isCompactGap
-                    ? Math.max(18, gapMin * PIXELS_PER_MIN - 2)
-                    : Math.max(30, gapMin * PIXELS_PER_MIN - 4);
+                  const topPx = slotTopPx + (isCompactGap ? 1 : 2);
+                  const heightPx = Math.max(isCompactGap ? 26 : 30, slotSpanPx - 4);
                   const isStillAhead =
                     !isToday || parseTimeToMinutes(leg.toMeeting.startTime) > currentMinutes;
                   const isLate =
@@ -1222,27 +1371,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     !isTight &&
                     (Boolean(resolvedByMeetingId[leg.toMeeting.id]) ||
                       Boolean(resolvedByMeetingId[leg.fromMeeting.id]));
-
-                  const officeEachWayMinutes =
-                    gapMin >= 45 && settings.office?.buildingCode
-                      ? Math.round(
-                          (calculateBuildingToBuildingSeconds(
-                            leg.fromMeeting.buildingCode,
-                            leg.fromMeeting.floor || 1,
-                            settings.office.buildingCode,
-                            settings.office.floor || 1,
-                            settings
-                          ).totalMinutes +
-                            calculateBuildingToBuildingSeconds(
-                              settings.office.buildingCode,
-                              settings.office.floor || 1,
-                              leg.toMeeting.buildingCode,
-                              leg.toMeeting.floor || 1,
-                              settings
-                            ).totalMinutes) /
-                            2
-                        )
-                      : null;
 
                   if (isCompactGap) {
                     return (
@@ -1259,10 +1387,40 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         }`}
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                       >
-                        <span className="font-bold truncate">
-                          🚶 {leg.fromMeeting.buildingCode} → {leg.toMeeting.buildingCode} ·{' '}
-                          {leg.questFlowTravelMinutes}m walk
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {isResolved ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                          ) : (
+                            <Footprints
+                              className={`w-3.5 h-3.5 shrink-0 ${
+                                isLate
+                                  ? 'text-rose-600'
+                                  : isTight
+                                  ? 'text-amber-600'
+                                  : 'text-blue-600 dark:text-blue-400'
+                              }`}
+                            />
+                          )}
+                          <span className="font-bold truncate">
+                            {leg.fromMeeting.buildingCode} → {leg.toMeeting.buildingCode} ·{' '}
+                            {leg.questFlowTravelMinutes}m walk
+                          </span>
+                        </div>
+                        <a
+                          href={getGoogleMapsDirectionsUrl(
+                            leg.fromMeeting.buildingCode,
+                            leg.toMeeting.buildingCode,
+                            'walking'
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                          title="Open walking directions in Google Maps"
+                        >
+                          <Navigation className="w-2.5 h-2.5" />
+                          <span>Route</span>
+                          <ExternalLink className="w-2 h-2 opacity-75" />
+                        </a>
                       </div>
                     );
                   }
@@ -1338,12 +1496,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                           </a>
                         </div>
                       </div>
-
-                      {officeEachWayMinutes !== null && settings.office?.buildingCode && (
-                        <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 truncate">
-                          Time to go back to your office ({settings.office.buildingCode} · {officeEachWayMinutes}m each way)
-                        </p>
-                      )}
                     </div>
                   );
                 })}
@@ -1353,8 +1505,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   const format = meeting.format || (meeting.isOnline ? 'online' : 'in_person');
                   const isOnline = format === 'online' || meeting.isOnline;
                   const durationMin = endMin - startMin;
-                  const topPx = (startMin - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12;
-                  const heightPx = Math.max(52, durationMin * PIXELS_PER_MIN - 2);
+                  const topPx = timelineLayout.getTopPxForMin(startMin);
+                  const bottomPx = timelineLayout.getTopPxForMin(endMin);
+                  const heightPx = Math.max(52, bottomPx - topPx - 2);
                   const isCompact = heightPx < 76;
 
                   const isInProgress =
@@ -1367,11 +1520,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     !targetProblem && Boolean(resolvedByMeetingId[meeting.id]);
 
                   const mapsUrl = !isOnline
-                    ? getGoogleMapsDirectionsUrl(
-                        prevPhysicalBuildingById[meeting.id],
-                        meeting.buildingCode,
-                        'walking'
-                      )
+                    ? getGoogleMapsBuildingUrl(meeting.buildingCode)
                     : '';
 
                   const widthPct = 100 / totalCols;
@@ -1719,7 +1868,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   <div
                     className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
                     style={{
-                      top: `${(currentMinutes - timelineLayout.gridStartMin) * PIXELS_PER_MIN + 12}px`,
+                      top: `${timelineLayout.getTopPxForMin(currentMinutes)}px`,
                     }}
                   >
                     <div className="w-2.5 h-2.5 rounded-full bg-rose-600 -ml-1.5 ring-2 ring-white dark:ring-neutral-900" />

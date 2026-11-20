@@ -26,6 +26,20 @@ export function getBuildingMapsQuery(buildingCode?: string): string {
 }
 
 /**
+ * Generates an external Google Maps search/place URL for a single UW campus building
+ * using its full name + "University of Waterloo, Waterloo, ON".
+ */
+export function getGoogleMapsBuildingUrl(buildingCode?: string): string {
+  const query = getBuildingMapsQuery(buildingCode);
+  if (query) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    'University of Waterloo, Waterloo, ON'
+  )}`;
+}
+
+/**
  * Generates an external Google Maps URL for walking/driving/transit directions
  * between two UW campus buildings using readable building names, or a search URL
  * when only a destination building is known (or origin === destination).
