@@ -82,20 +82,20 @@ export interface NotificationSettings {
   soundAlert: boolean;
 }
 
-export type OfficeReturnThreshold = 30 | 45 | 60 | 'never';
+export type OfficeReturnThreshold = 45 | 60 | 90 | 'never';
 
 export interface UserOffice {
   buildingCode: string; // e.g. 'E7'
   roomNumber: string; // e.g. '2408'
   floor: number; // e.g. 2
-  returnMinGapMinutes?: OfficeReturnThreshold; // default: 45
+  returnMinGapMinutes?: OfficeReturnThreshold; // default: 60
 }
 
 export const SAMPLE_DEFAULT_OFFICE: UserOffice = {
   buildingCode: 'E7',
   roomNumber: '2408',
   floor: 2,
-  returnMinGapMinutes: 45,
+  returnMinGapMinutes: 60,
 };
 
 export interface CampusSettings {

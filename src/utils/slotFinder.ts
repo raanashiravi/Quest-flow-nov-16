@@ -27,7 +27,9 @@ export function calculateDeterministicTravelMinutes(
   toBuilding: string,
   toFloor: number,
   settings: QuestSettings,
-  isSafeTime = true
+  isSafeTime = true,
+  fromRoomNumber?: string,
+  toRoomNumber?: string
 ): number {
   if (!fromBuilding || !toBuilding || fromBuilding === 'ONLINE' || toBuilding === 'ONLINE') {
     return 0;
@@ -35,15 +37,20 @@ export function calculateDeterministicTravelMinutes(
 
   const buffer = settings.arrivalBufferMinutes ?? 5;
 
-  // Same building: floor change + 60s find room only
-  if (fromBuilding.toUpperCase() === toBuilding.toUpperCase()) {
+  // Same building:
+  // - Same building AND same room: 0 walk, 0 buffer
+  // - Same building, different room: floor change + find room, without the arrival buffer
+  if (fromBuilding.trim().toUpperCase() === toBuilding.trim().toUpperCase()) {
+    const cleanFromRoom = (fromRoomNumber || '').trim().toUpperCase();
+    const cleanToRoom = (toRoomNumber || '').trim().toUpperCase();
+    if (cleanFromRoom && cleanToRoom && cleanFromRoom === cleanToRoom) {
+      return 0;
+    }
     const floorDelta = Math.abs((fromFloor || 1) - (toFloor || 1));
     const floorChange = calculateFloorChangeSeconds(floorDelta, settings);
     const totalSec = floorChange.seconds + settings.findRoomSeconds;
     const baseMin = Math.ceil(totalSec / 60);
-    return isSafeTime
-      ? Math.max(Math.ceil((totalSec * settings.safeTimeMultiplier) / 60), baseMin + buffer)
-      : baseMin;
+    return baseMin;
   }
 
   // Cross-building travel
@@ -75,6 +82,7 @@ export function findAvailableSlots(
   existingEvents: QuestMeeting[],
   target: {
     buildingCode: string;
+    roomNumber?: string;
     floor: number;
     isOnline: boolean;
     durationMinutes: number;
@@ -89,6 +97,11 @@ export function findAvailableSlots(
   const maxMin = parseTimeToMinutes(maxSearchTime);
   const preferredMin = preferredStartTime ? parseTimeToMinutes(preferredStartTime) : minMin;
 
+  // Strictly filter existingEvents to targetDate if provided
+  const filteredEvents = targetDate
+    ? existingEvents.filter((e) => e.date === targetDate)
+    : existingEvents;
+
   // For today's date, only return start times at least 10 minutes from now
   // rounded up to the next :00/:15/:30/:45
   const now = new Date();
@@ -96,13 +109,13 @@ export function findAvailableSlots(
     2,
     '0'
   )}-${String(now.getDate()).padStart(2, '0')}`;
-  const effectiveDate = targetDate || existingEvents[0]?.date;
+  const effectiveDate = targetDate || filteredEvents[0]?.date;
   const isToday = effectiveDate === todayLocalStr;
   const nowPlus10Quarter = isToday
     ? Math.ceil((now.getHours() * 60 + now.getMinutes() + 10) / 15) * 15
     : 0;
 
-  const sorted = [...existingEvents].sort(
+  const sorted = [...filteredEvents].sort(
     (a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
   );
 
@@ -174,7 +187,9 @@ export function findAvailableSlots(
         target.buildingCode,
         target.floor,
         settings,
-        true // safe time
+        true, // safe time
+        prevPhysicalEvt.roomNumber,
+        target.roomNumber
       );
       const gapBefore = start - parseTimeToMinutes(prevAnyEvt.endTime);
       if (gapBefore < travelBeforeMin) continue;
@@ -189,7 +204,9 @@ export function findAvailableSlots(
         nextPhysicalEvt.buildingCode,
         nextPhysicalEvt.floor,
         settings,
-        true // safe time
+        true, // safe time
+        target.roomNumber,
+        nextPhysicalEvt.roomNumber
       );
       const gapAfter = parseTimeToMinutes(nextAnyEvt.startTime) - end;
       if (gapAfter < travelAfterMin) continue;
@@ -241,6 +258,54 @@ export function findAvailableSlots(
   const pickLatestInWindow = (win: SuggestedSlot[]): SuggestedSlot =>
     [...win].reverse().find((s) => s.startMinutes % 15 === 0) || win[win.length - 1];
 
+  const pickMiddayInWindow = (
+    win: SuggestedSlot[],
+    earliest: SuggestedSlot,
+    latest: SuggestedSlot
+  ): SuggestedSlot | undefined => {
+    const targetMid = Math.round((earliest.startMinutes + latest.startMinutes) / 2);
+    const quarterCandidates = win.filter(
+      (s) =>
+        s.startMinutes % 15 === 0 &&
+        Math.abs(s.startMinutes - earliest.startMinutes) >= 30 &&
+        Math.abs(s.startMinutes - latest.startMinutes) >= 30
+    );
+    const pool =
+      quarterCandidates.length > 0
+        ? quarterCandidates
+        : win.filter(
+            (s) =>
+              Math.abs(s.startMinutes - earliest.startMinutes) >= 30 &&
+              Math.abs(s.startMinutes - latest.startMinutes) >= 30
+          );
+    if (pool.length === 0) return undefined;
+    return pool.reduce((best, cur) =>
+      Math.abs(cur.startMinutes - targetMid) < Math.abs(best.startMinutes - targetMid)
+        ? cur
+        : best
+    );
+  };
+
+  // If there is only one free window, offer three chips:
+  // the earliest start, one around midday, and the latest start (all valid)
+  if (windows.length === 1) {
+    const win = windows[0];
+    const earliest = pickEarliestInWindow(win);
+    const latest = pickLatestInWindow(win);
+    const chosen: SuggestedSlot[] = [earliest];
+
+    if (Math.abs(latest.startMinutes - earliest.startMinutes) >= 30) {
+      const midday = pickMiddayInWindow(win, earliest, latest);
+      if (midday) {
+        chosen.push(midday);
+      }
+      chosen.push(latest);
+    }
+
+    chosen.sort((a, b) => a.startMinutes - b.startMinutes);
+    return chosen.slice(0, 3);
+  }
+
   // 1. Pick the earliest valid start in each separate free window of the day, in time order, up to 3 chips
   const chosen: SuggestedSlot[] = windows.slice(0, 3).map(pickEarliestInWindow);
 
@@ -271,7 +336,7 @@ export function findAvailableSlots(
 export function validateSlotOrFindEarliest(
   startMin: number,
   durationMinutes: number,
-  target: { buildingCode: string; floor: number; isOnline: boolean },
+  target: { buildingCode: string; roomNumber?: string; floor: number; isOnline: boolean },
   existingEvents: QuestMeeting[],
   settings: QuestSettings
 ): {
@@ -350,7 +415,9 @@ export function validateSlotOrFindEarliest(
       target.buildingCode,
       target.floor,
       settings,
-      true
+      true,
+      prevPhysicalEvt.roomNumber,
+      target.roomNumber
     );
     const gapBefore = startMin - parseTimeToMinutes(prevAnyEvt.endTime);
 
@@ -373,7 +440,9 @@ export function validateSlotOrFindEarliest(
       nextPhysicalEvt.buildingCode,
       nextPhysicalEvt.floor,
       settings,
-      true
+      true,
+      target.roomNumber,
+      nextPhysicalEvt.roomNumber
     );
     const gapAfter = parseTimeToMinutes(nextAnyEvt.startTime) - endMin;
 

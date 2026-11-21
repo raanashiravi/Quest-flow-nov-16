@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Sparkles,
   Calendar,
-  Zap,
 } from 'lucide-react';
 
 interface WelcomeHeroPageProps {
@@ -15,7 +14,6 @@ interface WelcomeHeroPageProps {
 
 export const WelcomeHeroPage: React.FC<WelcomeHeroPageProps> = ({
   onStartSampleWalkthrough,
-  onOpenNextMeeting,
   onConnectCalendar,
 }) => {
   return (
@@ -27,7 +25,7 @@ export const WelcomeHeroPage: React.FC<WelcomeHeroPageProps> = ({
         </div>
 
         <h1 className="text-3xl sm:text-5xl font-extrabold text-[var(--text-primary)] tracking-tight leading-[1.15] max-w-3xl mx-auto">
-          Arrive on time to every meeting across Waterloo.
+          Arrive on time to every meeting at the University of Waterloo.
         </h1>
 
         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3.5 pt-2">
@@ -37,18 +35,8 @@ export const WelcomeHeroPage: React.FC<WelcomeHeroPageProps> = ({
             className="px-6 py-4 text-sm font-bold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] focus-visible:ring-offset-2"
           >
             <Sparkles className="w-4 h-4 shrink-0" />
-            <span>Try Sample Walkthrough</span>
+            <span>Try the tutorial</span>
             <ArrowRight className="w-4 h-4 shrink-0" />
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenNextMeeting}
-            className="px-6 py-4 text-sm font-bold text-[var(--sky-strong)] bg-[var(--sky-tint)] hover:bg-[var(--bg-hover)] border border-[var(--sky)] rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] focus-visible:ring-offset-2"
-          >
-            <Zap className="w-4 h-4 shrink-0 text-[var(--sky)]" />
-            <span>Next Meeting (In a Rush)</span>
-            <ArrowRight className="w-4 h-4 shrink-0 opacity-75" />
           </button>
 
           <button

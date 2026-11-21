@@ -9,6 +9,7 @@ import {
   parseTimeToMinutes,
   calculateBuildingToBuildingSeconds,
   formatMinutesToTime,
+  formatTime12h,
 } from '../utils/travelCalculator';
 import { findAvailableSlots, SuggestedSlot } from '../utils/slotFinder';
 import { X, Trash2, AlertTriangle, Check, Building2, Video, Users } from 'lucide-react';
@@ -50,6 +51,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   const [travelWarning, setTravelWarning] = useState<string | null>(null);
   const [isImpossible, setIsImpossible] = useState<boolean>(false);
   const [workingSlots, setWorkingSlots] = useState<SuggestedSlot[]>([]);
+  const [jumpedToTomorrow, setJumpedToTomorrow] = useState<boolean>(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape and trap focus inside modal
@@ -99,6 +101,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       setOnlineLink(meetingToEdit.onlineLink || '');
       setOrganizer(meetingToEdit.organizer || '');
       setNotes(meetingToEdit.notes || '');
+      setJumpedToTomorrow(false);
     } else {
       const defaultBldg = 'MC';
       const defaultRoom = '2018';
@@ -115,6 +118,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         sameDayEvents,
         {
           buildingCode: defaultBldg,
+          roomNumber: defaultRoom,
           floor: defaultFloor,
           isOnline: false,
           durationMinutes: defaultDuration,
@@ -127,8 +131,9 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       );
 
       let targetFormDate = selectedDate;
-      let prefillStart = initialSlots[0]?.startTime || '11:00';
-      let prefillEnd = initialSlots[0]?.endTime || '11:30';
+      let prefillStart = initialSlots[0]?.startTime || '08:00';
+      let prefillEnd = initialSlots[0]?.endTime || '08:30';
+      let didJump = false;
 
       if (initialSlots.length === 0 && selectedDate === todayLocalStr) {
         const tomorrow = new Date(now);
@@ -137,12 +142,14 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           tomorrow.getMonth() + 1
         ).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
         targetFormDate = tomorrowStr;
+        didJump = true;
 
         const tomorrowEvents = existingMeetings.filter((m) => m.date === tomorrowStr);
         const tomorrowSlots = findAvailableSlots(
           tomorrowEvents,
           {
             buildingCode: defaultBldg,
+            roomNumber: defaultRoom,
             floor: defaultFloor,
             isOnline: false,
             durationMinutes: defaultDuration,
@@ -168,11 +175,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       setOnlineLink('');
       setOrganizer('');
       setNotes('');
+      setJumpedToTomorrow(didJump);
     }
     setTravelWarning(null);
     setIsImpossible(false);
     setWorkingSlots([]);
-  }, [meetingToEdit, selectedDate, isOpen]);
+  }, [meetingToEdit, selectedDate, isOpen, existingMeetings, settings]);
 
   // Live travel validation (from previous AND to next meeting) + slot suggestions
   useEffect(() => {
@@ -196,21 +204,11 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
     const computeWorkingSlots = () => {
       const target = {
         buildingCode: format === 'online' ? 'ONLINE' : buildingCode,
+        roomNumber: format === 'online' ? '' : roomNumber.trim(),
         floor,
         isOnline: format === 'online',
         durationMinutes,
       };
-      const preferred = formatMinutesToTime(Math.ceil(startMin / 5) * 5);
-      const afterChosen = findAvailableSlots(
-        sameDay,
-        target,
-        settings,
-        '08:00',
-        '18:00',
-        preferred,
-        date
-      );
-      if (afterChosen.length >= 3) return afterChosen;
       return findAvailableSlots(sameDay, target, settings, '08:00', '18:00', undefined, date);
     };
 
@@ -223,7 +221,9 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
     if (overlapping) {
       setTravelWarning(
-        `Time overlaps with "${overlapping.title}" (${overlapping.startTime}–${overlapping.endTime}).`
+        `Time overlaps with "${overlapping.title}" (${formatTime12h(
+          overlapping.startTime
+        )}–${formatTime12h(overlapping.endTime)}).`
       );
       setIsImpossible(true);
       setWorkingSlots(computeWorkingSlots());
@@ -241,7 +241,6 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
     const prior = [...sorted].reverse().find((m) => parseTimeToMinutes(m.endTime) <= startMin);
     const next = sorted.find((m) => parseTimeToMinutes(m.startTime) >= endMin);
 
-    const buffer = settings.arrivalBufferMinutes ?? 5;
     const currentLocLabel = `${buildingCode}${roomNumber.trim() ? ` ${roomNumber.trim()}` : ''}`;
     const articleFor = (n: number) => (n === 8 || n === 11 || n === 18 ? 'an' : 'a');
 
@@ -257,19 +256,26 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         prior.floor || 1,
         buildingCode,
         floor,
-        settings
+        settings,
+        prior.roomNumber,
+        roomNumber.trim()
       );
       const neededTravel = calc.totalMinutes;
+      const effectiveBuffer = calc.bufferMinutes;
       const priorLocLabel = `${prior.buildingCode}${prior.roomNumber ? ` ${prior.roomNumber}` : ''}`;
 
-      if (gap < neededTravel) {
-        impossibleMsg = `You can't get from ${priorLocLabel} to ${currentLocLabel} by ${startTime} — it's ${articleFor(
-          neededTravel
-        )} ${neededTravel} min walk and you have ${gap}.`;
-      } else if (gap < neededTravel + buffer) {
-        tightMsg = `You can't comfortably get from ${priorLocLabel} to ${currentLocLabel} by ${startTime} — it's ${articleFor(
-          neededTravel
-        )} ${neededTravel} min walk (+${buffer} min buffer) and you have ${gap}.`;
+      if (!calc.isSameRoom) {
+        if (gap < neededTravel) {
+          impossibleMsg = `You can't get from ${priorLocLabel} to ${currentLocLabel} by ${formatTime12h(
+            startTime
+          )} — it's ${articleFor(neededTravel)} ${neededTravel} min walk and you have ${gap}.`;
+        } else if (gap < neededTravel + effectiveBuffer) {
+          tightMsg = `You can't comfortably get from ${priorLocLabel} to ${currentLocLabel} by ${formatTime12h(
+            startTime
+          )} — it's ${articleFor(
+            neededTravel
+          )} ${neededTravel} min walk (+${effectiveBuffer} min buffer) and you have ${gap}.`;
+        }
       }
     }
 
@@ -282,19 +288,26 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         floor,
         next.buildingCode,
         next.floor || 1,
-        settings
+        settings,
+        roomNumber.trim(),
+        next.roomNumber
       );
       const neededTravel = calc.totalMinutes;
+      const effectiveBuffer = calc.bufferMinutes;
       const nextLocLabel = `${next.buildingCode}${next.roomNumber ? ` ${next.roomNumber}` : ''}`;
 
-      if (gap < neededTravel && !impossibleMsg) {
-        impossibleMsg = `You can't get from ${currentLocLabel} to ${nextLocLabel} by ${next.startTime} — it's ${articleFor(
-          neededTravel
-        )} ${neededTravel} min walk and you have ${gap}.`;
-      } else if (gap < neededTravel + buffer && !impossibleMsg && !tightMsg) {
-        tightMsg = `You can't comfortably get from ${currentLocLabel} to ${nextLocLabel} by ${next.startTime} — it's ${articleFor(
-          neededTravel
-        )} ${neededTravel} min walk (+${buffer} min buffer) and you have ${gap}.`;
+      if (!calc.isSameRoom) {
+        if (gap < neededTravel && !impossibleMsg) {
+          impossibleMsg = `You can't get from ${currentLocLabel} to ${nextLocLabel} by ${formatTime12h(
+            next.startTime
+          )} — it's ${articleFor(neededTravel)} ${neededTravel} min walk and you have ${gap}.`;
+        } else if (gap < neededTravel + effectiveBuffer && !impossibleMsg && !tightMsg) {
+          tightMsg = `You can't comfortably get from ${currentLocLabel} to ${nextLocLabel} by ${formatTime12h(
+            next.startTime
+          )} — it's ${articleFor(
+            neededTravel
+          )} ${neededTravel} min walk (+${effectiveBuffer} min buffer) and you have ${gap}.`;
+        }
       }
     }
 
@@ -330,6 +343,37 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   ]);
 
   if (!isOpen) return null;
+
+  const handleDateChange = (newDate: string) => {
+    setDate(newDate);
+    setJumpedToTomorrow(false);
+    if (!newDate || meetingToEdit) return;
+
+    const curStartMin = parseTimeToMinutes(startTime);
+    const curEndMin = parseTimeToMinutes(endTime);
+    const durationMinutes = Math.max(15, curEndMin > curStartMin ? curEndMin - curStartMin : 30);
+
+    const sameDayEvents = existingMeetings.filter((m) => m.date === newDate);
+    const slots = findAvailableSlots(
+      sameDayEvents,
+      {
+        buildingCode: format === 'online' ? 'ONLINE' : buildingCode,
+        roomNumber: format === 'online' ? '' : roomNumber.trim(),
+        floor,
+        isOnline: format === 'online',
+        durationMinutes,
+      },
+      settings,
+      '08:00',
+      '18:00',
+      undefined,
+      newDate
+    );
+    if (slots.length > 0) {
+      setStartTime(slots[0].startTime);
+      setEndTime(slots[0].endTime);
+    }
+  };
 
   const handleRoomChange = (val: string) => {
     setRoomNumber(val);
@@ -531,9 +575,14 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 type="date"
                 required
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => handleDateChange(e.target.value)}
                 className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)] font-mono"
               />
+              {jumpedToTomorrow && (
+                <p className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">
+                  No times left today — showing tomorrow.
+                </p>
+              )}
             </div>
 
             <div>
@@ -638,7 +687,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                         }}
                         className="px-2 py-0.5 rounded-md bg-[var(--bg-main)] hover:bg-[var(--sky-tint)] border border-[var(--border)] hover:border-[var(--sky-strong)] text-[var(--text-primary)] hover:text-[var(--sky-strong)] font-mono font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
                       >
-                        {slot.startTime}
+                        {formatTime12h(slot.startTime)}
                       </button>
                     ))}
                   </div>

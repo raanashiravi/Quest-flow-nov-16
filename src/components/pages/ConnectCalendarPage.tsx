@@ -3,6 +3,7 @@ import {
   CampusMeeting,
 } from '../../types';
 import { getSampleDayMeetings } from '../../data/sampleDay';
+import { formatTime12h } from '../../utils/travelCalculator';
 import { parseIcsContents } from '../../utils/icsParser';
 import { parseLocationString } from '../../utils/locationParser';
 import {
@@ -54,13 +55,14 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
   const hasMeetings = currentMeetings && currentMeetings.length > 0;
+  const tutorialMeetings = getSampleDayMeetings(selectedDate);
 
   // 1-Click Load Sample Data
   const handleLoadSample = () => {
     const sample = getSampleDayMeetings(selectedDate);
     onSetMeetings(sample, true);
     setErrorNotice(null);
-    setSuccessNotice(`Loaded 5 sample Waterloo meetings for ${selectedDate}.`);
+    setSuccessNotice(`Loaded 5 tutorial University of Waterloo meetings for ${selectedDate}.`);
     setTimeout(() => {
       onContinue();
     }, 400);
@@ -216,7 +218,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   // Guard: if user clicks Continue without inputting meetings, stop and show error
   const handleAttemptContinue = () => {
     if (!hasMeetings) {
-      setErrorNotice('No meetings have been inputted yet. Please connect an Outlook link, upload a .ics file, paste text, or load the sample data to continue.');
+      setErrorNotice('No meetings have been inputted yet. Please connect an Outlook link, upload a .ics file, paste text, or try the tutorial to continue.');
       return;
     }
     setErrorNotice(null);
@@ -320,7 +322,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           }`}
         >
           <Sparkles className={`w-3.5 h-3.5 ${activeTab === 'sample' ? 'text-white' : 'text-[var(--sky)]'}`} />
-          <span>Sample Data</span>
+          <span>Try the tutorial</span>
         </button>
       </div>
 
@@ -444,12 +446,12 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
         </div>
       )}
 
-      {/* Tab 4: Sample Data Option */}
+      {/* Tab 4: Tutorial Option */}
       {activeTab === 'sample' && (
         <div className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
           <div className="space-y-1">
             <h2 className="text-base font-bold text-[var(--text-primary)]">
-              University of Waterloo Sample Schedule
+              University of Waterloo Tutorial Schedule
             </h2>
             <p className="text-xs text-[var(--text-muted)] font-normal">
               Preloads 5 realistic faculty meetings in MC, NH, DC, E7, and Teams to test room-to-room navigation.
@@ -458,11 +460,17 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
 
           <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1.5 font-normal">
             <p className="font-semibold text-[var(--text-primary)]">Includes:</p>
-            <p>• 10:00 – 10:22: Team Sync (MC 5479)</p>
-            <p>• 10:30 – 11:00: Budget Review (NH 3001) <span className="text-[var(--status-late-fg)] font-semibold">(Tight 8 min gap)</span></p>
-            <p>• 13:00 – 13:45: IT Systems (DC 1302)</p>
-            <p>• 14:15 – 15:00: Curriculum Committee (E7 2409)</p>
-            <p>• 15:30 – 16:15: Research Sync (Microsoft Teams)</p>
+            {tutorialMeetings.map((m) => {
+              const locLabel =
+                m.format === 'online' || m.isOnline || m.buildingCode === 'ONLINE'
+                  ? 'Microsoft Teams'
+                  : `${m.buildingCode}${m.roomNumber ? ` ${m.roomNumber}` : ''}`;
+              return (
+                <p key={m.id}>
+                  • {formatTime12h(m.startTime)} – {formatTime12h(m.endTime)}: {m.title} ({locLabel})
+                </p>
+              );
+            })}
           </div>
 
           <button
@@ -471,7 +479,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
             className="px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-xs transition-colors flex items-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Load Sample Data & Open Calendar</span>
+            <span>Try the tutorial</span>
           </button>
         </div>
       )}

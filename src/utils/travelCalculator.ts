@@ -73,18 +73,41 @@ export function calculateBuildingToBuildingSeconds(
   fromFloor: number,
   toBuildingCode: string,
   toFloor: number,
-  settings: CampusSettings
+  settings: CampusSettings,
+  fromRoomNumber?: string,
+  toRoomNumber?: string
 ): {
   totalSeconds: number;
   totalMinutes: number;
   rawWalkMinutes: number;
+  isSameBuilding: boolean;
+  isSameRoom: boolean;
+  bufferMinutes: number;
 } {
   const isSame =
     Boolean(fromBuildingCode) &&
     Boolean(toBuildingCode) &&
-    fromBuildingCode.toUpperCase() === toBuildingCode.toUpperCase();
+    fromBuildingCode.trim().toUpperCase() === toBuildingCode.trim().toUpperCase();
 
   if (isSame) {
+    const cleanFromRoom = (fromRoomNumber || '').trim().toUpperCase();
+    const cleanToRoom = (toRoomNumber || '').trim().toUpperCase();
+    const isSameRoom =
+      Boolean(cleanFromRoom) &&
+      Boolean(cleanToRoom) &&
+      cleanFromRoom === cleanToRoom;
+
+    if (isSameRoom) {
+      return {
+        totalSeconds: 0,
+        totalMinutes: 0,
+        rawWalkMinutes: 0,
+        isSameBuilding: true,
+        isSameRoom: true,
+        bufferMinutes: 0,
+      };
+    }
+
     const floorDelta = Math.abs(fromFloor - toFloor);
     const floorChange = calculateFloorChangeSeconds(floorDelta, settings);
     const sec = floorChange.seconds + settings.findRoomSeconds;
@@ -92,6 +115,9 @@ export function calculateBuildingToBuildingSeconds(
       totalSeconds: sec,
       totalMinutes: Math.ceil(sec / 60),
       rawWalkMinutes: 0,
+      isSameBuilding: true,
+      isSameRoom: false,
+      bufferMinutes: 0,
     };
   }
 
@@ -122,6 +148,9 @@ export function calculateBuildingToBuildingSeconds(
     totalSeconds,
     totalMinutes: Math.ceil(totalSeconds / 60),
     rawWalkMinutes,
+    isSameBuilding: false,
+    isSameRoom: false,
+    bufferMinutes: settings.arrivalBufferMinutes ?? 5,
   };
 }
 
@@ -202,15 +231,19 @@ export function getDepartureForMeeting(
       };
     }
 
-    const walkMinutes = calculateBuildingToBuildingSeconds(
+    const fromOfficeCalc = calculateBuildingToBuildingSeconds(
       office.buildingCode,
       office.floor || 1,
       meeting.buildingCode,
       meeting.floor || 1,
-      settings
-    ).totalMinutes;
+      settings,
+      office.roomNumber,
+      meeting.roomNumber
+    );
+    const walkMinutes = fromOfficeCalc.totalMinutes;
+    const effectiveBuffer = fromOfficeCalc.bufferMinutes;
 
-    const leaveByMinutes = startMin - (walkMinutes + bufferMinutes);
+    const leaveByMinutes = startMin - (walkMinutes + effectiveBuffer);
     const leaveByTime = formatMinutesToTime(leaveByMinutes);
 
     return {
@@ -236,63 +269,79 @@ export function getDepartureForMeeting(
   // Case 2: Has a preceding in-person meeting
   const prevEndMin = parseTimeToMinutes(previousMeeting.endTime);
   const gapMinutes = startMin - prevEndMin;
-  const threshold = office ? (office.returnMinGapMinutes ?? 45) : 'never';
-  const returnsToOffice = Boolean(
-    office && threshold !== 'never' && gapMinutes >= threshold
-  );
+  const rawThreshold = office ? (office.returnMinGapMinutes ?? 60) : 'never';
+  const threshold =
+    rawThreshold !== 'never' && Number(rawThreshold) === 30 ? 45 : rawThreshold;
 
-  if (returnsToOffice && office) {
+  if (office && threshold !== 'never' && gapMinutes >= threshold) {
     const toOfficeWalkMinutes = calculateBuildingToBuildingSeconds(
       previousMeeting.buildingCode,
       previousMeeting.floor || 1,
       office.buildingCode,
       office.floor || 1,
-      settings
+      settings,
+      previousMeeting.roomNumber,
+      office.roomNumber
     ).totalMinutes;
 
-    const walkMinutes = calculateBuildingToBuildingSeconds(
+    const fromOfficeCalc = calculateBuildingToBuildingSeconds(
       office.buildingCode,
       office.floor || 1,
       meeting.buildingCode,
       meeting.floor || 1,
-      settings
-    ).totalMinutes;
+      settings,
+      office.roomNumber,
+      meeting.roomNumber
+    );
+    const walkMinutes = fromOfficeCalc.totalMinutes;
+    const effectiveBuffer = fromOfficeCalc.bufferMinutes;
 
-    const officeArrivalMinutes = prevEndMin + toOfficeWalkMinutes;
-    const officeArrivalTime = formatMinutesToTime(officeArrivalMinutes);
-    const leaveByMinutes = startMin - (walkMinutes + bufferMinutes);
-    const leaveByTime = formatMinutesToTime(leaveByMinutes);
+    // Only plan an office trip if the time at the office is at least 15 minutes:
+    // gap >= walk to office + walk from office + arrival buffer + 15
+    const minGapForOfficeStay =
+      toOfficeWalkMinutes + walkMinutes + effectiveBuffer + 15;
 
-    return {
-      hasOrigin: true,
-      originBuildingCode: office.buildingCode,
-      originRoomNumber: office.roomNumber,
-      originLabel: `office ${office.buildingCode}${
-        office.roomNumber ? ` ${office.roomNumber}` : ''
-      }`,
-      walkMinutes,
-      leaveByMinutes,
-      leaveByTime,
-      leaveByTime12h: formatTime12h(leaveByTime),
-      isViaOffice: true,
-      isOfficeReturnBetweenMeetings: true,
-      toOfficeWalkMinutes,
-      officeArrivalMinutes,
-      officeArrivalTime,
-      officeArrivalTime12h: formatTime12h(officeArrivalTime),
-    };
+    if (gapMinutes >= minGapForOfficeStay) {
+      const officeArrivalMinutes = prevEndMin + toOfficeWalkMinutes;
+      const officeArrivalTime = formatMinutesToTime(officeArrivalMinutes);
+      const leaveByMinutes = startMin - (walkMinutes + effectiveBuffer);
+      const leaveByTime = formatMinutesToTime(leaveByMinutes);
+
+      return {
+        hasOrigin: true,
+        originBuildingCode: office.buildingCode,
+        originRoomNumber: office.roomNumber,
+        originLabel: `office ${office.buildingCode}${
+          office.roomNumber ? ` ${office.roomNumber}` : ''
+        }`,
+        walkMinutes,
+        leaveByMinutes,
+        leaveByTime,
+        leaveByTime12h: formatTime12h(leaveByTime),
+        isViaOffice: true,
+        isOfficeReturnBetweenMeetings: true,
+        toOfficeWalkMinutes,
+        officeArrivalMinutes,
+        officeArrivalTime,
+        officeArrivalTime12h: formatTime12h(officeArrivalTime),
+      };
+    }
   }
 
   // Direct walk from previousMeeting to meeting
-  const walkMinutes = calculateBuildingToBuildingSeconds(
+  const directCalc = calculateBuildingToBuildingSeconds(
     previousMeeting.buildingCode,
     previousMeeting.floor || 1,
     meeting.buildingCode,
     meeting.floor || 1,
-    settings
-  ).totalMinutes;
+    settings,
+    previousMeeting.roomNumber,
+    meeting.roomNumber
+  );
+  const walkMinutes = directCalc.totalMinutes;
+  const effectiveBuffer = directCalc.bufferMinutes;
 
-  const leaveByMinutes = startMin - (walkMinutes + bufferMinutes);
+  const leaveByMinutes = startMin - (walkMinutes + effectiveBuffer);
   const leaveByTime = formatMinutesToTime(leaveByMinutes);
 
   return {
@@ -383,54 +432,73 @@ export function calculateTravelLeg(
   }
 
   // Cross-location calculation
-  const isSameBuilding =
-    Boolean(fromMeeting.buildingCode) &&
-    Boolean(toMeeting.buildingCode) &&
-    fromMeeting.buildingCode.toUpperCase() === toMeeting.buildingCode.toUpperCase();
-
   const b2b = calculateBuildingToBuildingSeconds(
     fromMeeting.buildingCode,
     fromMeeting.floor || 1,
     toMeeting.buildingCode,
     toMeeting.floor || 1,
-    settings
+    settings,
+    fromMeeting.roomNumber,
+    toMeeting.roomNumber
   );
+  const isSameBuilding = b2b.isSameBuilding;
+  const isSameRoom = b2b.isSameRoom;
   const totalTravelSeconds = b2b.totalSeconds;
   const totalTravelMinutes = b2b.totalMinutes;
   const rawWalkMinutes = b2b.rawWalkMinutes;
+  const effectiveBufferMinutes = b2b.bufferMinutes;
   let breakdown: TravelBreakdown;
 
   if (isSameBuilding) {
-    const floorDelta = Math.abs((fromMeeting.floor || 1) - (toMeeting.floor || 1));
-    const floorChange = calculateFloorChangeSeconds(floorDelta, settings);
+    if (isSameRoom) {
+      breakdown = {
+        exitRoomSeconds: 0,
+        originFloorsDown: 0,
+        originFloorDownSeconds: 0,
+        originMethod: 'none',
+        outdoorWalkRawMinutes: 0,
+        outdoorWalkRawSeconds: 0,
+        outdoorWalkAdjustedSeconds: 0,
+        destFloorsUp: 0,
+        destFloorUpSeconds: 0,
+        destMethod: 'none',
+        findRoomSeconds: 0,
+        bufferMinutes: 0,
+        sameBuildingOnlySeconds: 0,
+        summaryLine: `Same room (${fromMeeting.buildingCode} ${fromMeeting.roomNumber}) — no walk required`,
+      };
+    } else {
+      const floorDelta = Math.abs((fromMeeting.floor || 1) - (toMeeting.floor || 1));
+      const floorChange = calculateFloorChangeSeconds(floorDelta, settings);
 
-    const summaryLine =
-      floorDelta > 0
-        ? `Same building (${fromMeeting.buildingCode}) · ${
-            floorChange.method === 'elevator' ? 'elevator' : 'stairs'
-          } ${floorDelta} floor${floorDelta > 1 ? 's' : ''} ${formatSecondsShort(
-            floorChange.seconds
-          )} · room transition ${formatSecondsShort(settings.findRoomSeconds)}`
-        : `Same building (${fromMeeting.buildingCode}) · room transition ${formatSecondsShort(
-            settings.findRoomSeconds
-          )}`;
+      const summaryLine =
+        floorDelta > 0
+          ? `Same building (${fromMeeting.buildingCode}) · ${
+              floorChange.method === 'elevator' ? 'elevator' : 'stairs'
+            } ${floorDelta} floor${floorDelta > 1 ? 's' : ''} ${formatSecondsShort(
+              floorChange.seconds
+            )} · room transition ${formatSecondsShort(settings.findRoomSeconds)}`
+          : `Same building (${fromMeeting.buildingCode}) · room transition ${formatSecondsShort(
+              settings.findRoomSeconds
+            )}`;
 
-    breakdown = {
-      exitRoomSeconds: 0,
-      originFloorsDown: floorDelta,
-      originFloorDownSeconds: floorChange.seconds,
-      originMethod: floorChange.method,
-      outdoorWalkRawMinutes: 0,
-      outdoorWalkRawSeconds: 0,
-      outdoorWalkAdjustedSeconds: 0,
-      destFloorsUp: 0,
-      destFloorUpSeconds: 0,
-      destMethod: 'none',
-      findRoomSeconds: settings.findRoomSeconds,
-      bufferMinutes,
-      sameBuildingOnlySeconds: totalTravelSeconds,
-      summaryLine,
-    };
+      breakdown = {
+        exitRoomSeconds: 0,
+        originFloorsDown: floorDelta,
+        originFloorDownSeconds: floorChange.seconds,
+        originMethod: floorChange.method,
+        outdoorWalkRawMinutes: 0,
+        outdoorWalkRawSeconds: 0,
+        outdoorWalkAdjustedSeconds: 0,
+        destFloorsUp: 0,
+        destFloorUpSeconds: 0,
+        destMethod: 'none',
+        findRoomSeconds: settings.findRoomSeconds,
+        bufferMinutes: 0,
+        sameBuildingOnlySeconds: totalTravelSeconds,
+        summaryLine,
+      };
+    }
   } else {
     const exitRoomSeconds = settings.exitRoomSeconds;
     const originFloorsDown = Math.max(0, (fromMeeting.floor || 1) - 1);
@@ -467,16 +535,18 @@ export function calculateTravelLeg(
       destFloorUpSeconds: destFloorUp.seconds,
       destMethod: destFloorUp.method,
       findRoomSeconds,
-      bufferMinutes,
+      bufferMinutes: effectiveBufferMinutes,
       summaryLine: parts.join(' · '),
     };
   }
 
-  const neededMinutes = totalTravelMinutes + bufferMinutes;
-  const safeTimeMinutes = Math.ceil(totalTravelMinutes * settings.safeTimeMultiplier);
+  const neededMinutes = totalTravelMinutes + effectiveBufferMinutes;
+  const safeTimeMinutes = isSameBuilding
+    ? totalTravelMinutes
+    : Math.ceil(totalTravelMinutes * settings.safeTimeMultiplier);
 
   // Recommended Departure Time:
-  // Must leave by: toMeeting.startTime - (totalTravelMinutes + bufferMinutes)
+  // Must leave by: toMeeting.startTime - (totalTravelMinutes + effectiveBufferMinutes)
   const departureMinutesFromMidnight = toStartMin - neededMinutes;
   const departureTime = formatMinutesToTime(departureMinutesFromMidnight);
 
@@ -486,15 +556,16 @@ export function calculateTravelLeg(
   const arrivalTime = formatMinutesToTime(expectedArrivalMin);
 
   // Status Evaluation:
-  // IMPOSSIBLE: gapMinutes < totalTravelMinutes (physically cannot arrive by startTime even with 0 buffer)
+  // Same room: always ON_TIME unless overlapping (gapMinutes < 0)
+  // IMPOSSIBLE: gapMinutes < totalTravelMinutes (or gapMinutes < 0)
   // TIGHT: totalTravelMinutes <= gapMinutes < neededMinutes (will arrive before start, but eats into buffer)
   // ON_TIME: gapMinutes >= neededMinutes
   let status: TravelStatus = 'ON_TIME';
   let minutesLate = 0;
 
-  if (gapMinutes < totalTravelMinutes) {
+  if (gapMinutes < 0 || gapMinutes < totalTravelMinutes) {
     status = 'IMPOSSIBLE';
-    minutesLate = totalTravelMinutes - gapMinutes;
+    minutesLate = Math.max(0, totalTravelMinutes - gapMinutes);
   } else if (gapMinutes < neededMinutes) {
     status = 'TIGHT';
     minutesLate = 0;
@@ -513,7 +584,7 @@ export function calculateTravelLeg(
     questFlowTravelMinutes: totalTravelMinutes,
     departureTime,
     arrivalTime,
-    bufferMinutes,
+    bufferMinutes: effectiveBufferMinutes,
     safeTimeMinutes,
     status,
     minutesLate,

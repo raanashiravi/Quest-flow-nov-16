@@ -85,7 +85,13 @@ export default function App() {
   const [settings, setSettings] = useState<CampusSettings>(() => {
     try {
       const saved = localStorage.getItem('questflow_settings_v6');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.office && Number(parsed.office.returnMinGapMinutes) === 30) {
+          parsed.office.returnMinGapMinutes = 45;
+        }
+        return parsed;
+      }
     } catch {}
     return DEFAULT_CAMPUS_SETTINGS;
   });

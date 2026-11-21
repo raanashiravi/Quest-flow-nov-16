@@ -198,6 +198,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   const [openMenuMeetingId, setOpenMenuMeetingId] = useState<string | null>(null);
 
   // Office inline editor state
+  const normalizeOfficeThreshold = (
+    val?: OfficeReturnThreshold | number
+  ): OfficeReturnThreshold => {
+    if (val === 'never') return 'never';
+    if (val === 30 || val === 45) return 45;
+    if (val === 90) return 90;
+    return 60;
+  };
+
   const [isEditingOffice, setIsEditingOffice] = useState<boolean>(false);
   const [officeBuilding, setOfficeBuilding] = useState<string>(
     settings.office?.buildingCode || 'E7'
@@ -206,13 +215,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     settings.office?.roomNumber || '2408'
   );
   const [officeReturnThreshold, setOfficeReturnThreshold] = useState<OfficeReturnThreshold>(
-    settings.office?.returnMinGapMinutes ?? 45
+    normalizeOfficeThreshold(settings.office?.returnMinGapMinutes)
   );
 
   const handleOpenOfficeEditor = () => {
     setOfficeBuilding(settings.office?.buildingCode || 'E7');
     setOfficeRoom(settings.office?.roomNumber ?? '2408');
-    setOfficeReturnThreshold(settings.office?.returnMinGapMinutes ?? 45);
+    setOfficeReturnThreshold(
+      normalizeOfficeThreshold(settings.office?.returnMinGapMinutes)
+    );
     setIsEditingOffice(true);
   };
 
@@ -994,9 +1005,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   }}
                   className="px-1.5 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)]"
                 >
-                  <option value={30}>30 min</option>
                   <option value={45}>45 min</option>
                   <option value={60}>60 min</option>
+                  <option value={90}>90 min</option>
                   <option value="never">Never</option>
                 </select>
                 <span>free</span>
@@ -1983,6 +1994,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               );
 
         const earliestStart = distinctSlots[0]?.startTime || preferredQuarter;
+        const earliestStart12h = formatTime12h(earliestStart);
 
         // Leave earlier meeting by time (for non-overlapping walking transitions)
         const laterStartMin = parseTimeToMinutes(later.startTime);
@@ -1992,6 +2004,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               ? leg.questFlowTravelMinutes + leg.bufferMinutes
               : leg.questFlowTravelMinutes)
         );
+        const leaveEarlierBy12h = formatTime12h(leaveEarlierBy);
 
         const sheetTitle = isOverlap
           ? `${targetIsUser ? `Your meeting (${targetMeeting.title})` : targetMeeting.title} in ${targetLoc} overlaps ${otherMeeting.title} in ${otherLoc}`
@@ -2006,7 +2019,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           const fallbackText =
             type === 'join_online'
               ? `Hi ${organizer},\n\nI have a back-to-back schedule across campus right around our session (${fromLoc} and ${toLoc}) and won't have enough travel time to make it in person.\n\nWould it be alright if I joined via Teams / virtually so we can start promptly? Let me know if that works!`
-              : `Hi ${organizer},\n\nLooking forward to our meeting today. I have a prior commitment in ${fromLoc} ending at ${earlier.endTime}, and realistic room-to-room walking across campus takes ~${leg.questFlowTravelMinutes} minutes.\n\nCould we start a few minutes later at ${earliestStart} so I can get there without cutting into our discussion? Thank you!`;
+              : `Hi ${organizer},\n\nLooking forward to our meeting today. I have a prior commitment in ${fromLoc} ending at ${formatTime12h(earlier.endTime)}, and realistic room-to-room walking across campus takes ~${leg.questFlowTravelMinutes} minutes.\n\nCould we start a few minutes later at ${earliestStart12h} so I can get there without cutting into our discussion? Thank you!`;
 
           setFixDraftText(fallbackText);
 
@@ -2071,8 +2084,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     {sheetTitle}
                   </h2>
                   <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                    {earlier.title} ({formatTimeCompact(earlier.startTime)}–{formatTimeCompact(earlier.endTime)}) ·{' '}
-                    {later.title} ({formatTimeCompact(later.startTime)}–{formatTimeCompact(later.endTime)})
+                    {earlier.title} ({formatTime12h(earlier.startTime)}–{formatTime12h(earlier.endTime)}) ·{' '}
+                    {later.title} ({formatTime12h(later.startTime)}–{formatTime12h(later.endTime)})
                   </p>
                 </div>
                 <button
@@ -2108,12 +2121,12 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                               });
                               applyResolvedConfirmation(
                                 targetMeeting.id,
-                                `Moved "${targetMeeting.title}" to ${slot.startTime}–${slot.endTime}`
+                                `Moved "${targetMeeting.title}" to ${formatTime12h(slot.startTime)}–${formatTime12h(slot.endTime)}`
                               );
                             }}
                             className="px-3.5 py-2 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white text-xs font-extrabold font-mono shadow-xs transition-all cursor-pointer active:scale-95"
                           >
-                            {formatTimeCompact(slot.startTime)}
+                            {formatTime12h(slot.startTime)}
                           </button>
                         ))}
                       </div>
@@ -2130,7 +2143,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     className="w-full px-4 py-3 rounded-xl bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
                   >
                     <MessageSquare className="w-4 h-4 shrink-0" />
-                    <span>Ask to start at {earliestStart}</span>
+                    <span>Ask to start at {earliestStart12h}</span>
                   </button>
                 ) : null}
 
@@ -2163,7 +2176,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)]">
                       <span>
                         {fixDraftType === 'later_start'
-                          ? `Note proposing ${earliestStart} start`
+                          ? `Note proposing ${earliestStart12h} start`
                           : 'Note to join online'}
                       </span>
                       {isDraftingFix && (
@@ -2227,7 +2240,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     <span className="font-medium">
                       Leave the earlier meeting by{' '}
                       <strong className="font-bold text-[var(--text-primary)]">
-                        {leaveEarlierBy}
+                        {leaveEarlierBy12h}
                       </strong>
                     </span>
                   </div>

@@ -184,7 +184,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               No Meetings Loaded Yet
             </h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Load your calendar or try the sample day to see your next meeting right away.
+              Load your calendar or try the tutorial to see your next meeting right away.
             </p>
           </div>
 
@@ -195,7 +195,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               className="flex-1 px-5 py-3.5 rounded-xl text-sm font-bold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
             >
               <Sparkles className="w-4 h-4 shrink-0" />
-              <span>Try Sample Walkthrough</span>
+              <span>Try the tutorial</span>
             </button>
             <button
               type="button"
