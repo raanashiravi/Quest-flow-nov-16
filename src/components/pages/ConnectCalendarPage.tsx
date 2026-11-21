@@ -22,6 +22,17 @@ interface ConnectCalendarPageProps {
   onSetMeetings: (meetings: CampusMeeting[], isSample?: boolean) => void;
   onContinue: () => void;
   onBack: () => void;
+  googleAuthState: {
+    isConnected: boolean;
+    isExpired: boolean;
+    email: string | null;
+  };
+  isGoogleConfigured: boolean;
+  isGoogleBusy: boolean;
+  googleError: string | null;
+  onClearGoogleError: () => void;
+  onConnectGoogle: () => Promise<number>;
+  onDisconnectGoogle: () => void;
 }
 
 export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
@@ -30,9 +41,16 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   onSetMeetings,
   onContinue,
   onBack,
+  googleAuthState,
+  isGoogleConfigured,
+  isGoogleBusy,
+  googleError,
+  onClearGoogleError,
+  onConnectGoogle,
+  onDisconnectGoogle,
 }) => {
-  // Tabs: Outlook/Link (default), Upload ICS, or Paste Text
-  const [activeTab, setActiveTab] = useState<'outlook' | 'ics' | 'text'>('outlook');
+  // Tabs: Outlook/Link (default), Google Calendar, Upload ICS, or Paste Text
+  const [activeTab, setActiveTab] = useState<'outlook' | 'google' | 'ics' | 'text'>('outlook');
 
   // Outlook URL state
   const [outlookUrl, setOutlookUrl] = useState('');
@@ -50,7 +68,28 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  const hasMeetings = currentMeetings && currentMeetings.length > 0;
+  const hasMeetings = (currentMeetings && currentMeetings.length > 0) || googleAuthState.isConnected;
+
+  const handleConnectGoogleClick = async () => {
+    setErrorNotice(null);
+    setSuccessNotice(null);
+    onClearGoogleError();
+    try {
+      const count = await onConnectGoogle();
+      setSuccessNotice(
+        `Connected Google Calendar (${count} event${count === 1 ? '' : 's'} loaded for ${selectedDate}).`
+      );
+    } catch (err: any) {
+      setErrorNotice(err?.message || 'Could not connect Google Calendar.');
+    }
+  };
+
+  const handleDisconnectGoogleClick = () => {
+    setErrorNotice(null);
+    setSuccessNotice(null);
+    onClearGoogleError();
+    onDisconnectGoogle();
+  };
 
   // Connect Outlook / WebCal Link (Fetches live ICS from server endpoint)
   const handleConnectOutlook = async (e: React.FormEvent) => {
@@ -225,12 +264,12 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
       </div>
 
       {/* Error Notice */}
-      {errorNotice && (
+      {(errorNotice || googleError) && (
         <div className="p-4 rounded-2xl bg-[var(--status-late-bg)] border border-[var(--status-late-fg)]/30 text-[var(--status-late-fg)] flex items-start gap-3 text-xs animate-in slide-in-from-top-1">
           <AlertCircle className="w-4 h-4 text-[var(--status-late-fg)] shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-bold">Input Required</p>
-            <p className="mt-0.5 leading-relaxed">{errorNotice}</p>
+            <p className="mt-0.5 leading-relaxed">{errorNotice || googleError}</p>
           </div>
         </div>
       )}
@@ -244,14 +283,15 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
       )}
 
       {/* Tabs */}
-      <div className="p-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl flex gap-1 text-xs font-semibold">
+      <div className="p-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl flex flex-wrap sm:flex-nowrap gap-1 text-xs font-semibold">
         <button
           type="button"
           onClick={() => {
             setActiveTab('outlook');
             setErrorNotice(null);
+            onClearGoogleError();
           }}
-          className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[130px] sm:min-w-0 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'outlook'
               ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -264,10 +304,28 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
         <button
           type="button"
           onClick={() => {
+            setActiveTab('google');
+            setErrorNotice(null);
+            onClearGoogleError();
+          }}
+          className={`flex-1 min-w-[130px] sm:min-w-0 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            activeTab === 'google'
+              ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Google Calendar</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
             setActiveTab('ics');
             setErrorNotice(null);
+            onClearGoogleError();
           }}
-          className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[130px] sm:min-w-0 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'ics'
               ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -282,8 +340,9 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           onClick={() => {
             setActiveTab('text');
             setErrorNotice(null);
+            onClearGoogleError();
           }}
-          className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[130px] sm:min-w-0 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'text'
               ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -293,6 +352,52 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           <span>Paste Text</span>
         </button>
       </div>
+
+      {/* Tab: Google Calendar */}
+      {activeTab === 'google' && (
+        <div className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
+          {!isGoogleConfigured ? (
+            <div className="p-4 rounded-2xl bg-[var(--status-late-bg)] border border-[var(--status-late-fg)]/30 text-[var(--status-late-fg)] flex items-center gap-2.5 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 text-[var(--status-late-fg)] shrink-0" />
+              <span>Google Calendar isn&apos;t set up</span>
+            </div>
+          ) : googleAuthState.isConnected ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Check className="w-4 h-4 text-[var(--status-ok-fg)] shrink-0" />
+                <span className="text-sm font-bold text-[var(--text-primary)] truncate">
+                  {googleAuthState.email || 'Connected'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDisconnectGoogleClick}
+                className="px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)] rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleConnectGoogleClick}
+                disabled={isGoogleBusy}
+                className="px-6 py-2.5 text-xs sm:text-sm font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isGoogleBusy ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Calendar className="w-4 h-4" />
+                )}
+                <span>
+                  {googleAuthState.isExpired ? 'Reconnect' : 'Connect Google Calendar'}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tab 1: Outlook / WebCal Link */}
       {activeTab === 'outlook' && (

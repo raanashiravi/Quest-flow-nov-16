@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   CampusMeeting,
   CampusSettings,
@@ -20,7 +20,18 @@ import {
   getDepartureForMeeting,
 } from './utils/travelCalculator';
 import { getGoogleMapsDirectionsUrl } from './utils/googleMapsLinks';
-import { Bell, Navigation, X, ExternalLink } from 'lucide-react';
+import {
+  connectGoogleCalendar,
+  createGoogleEvent,
+  deleteGoogleEvent,
+  disconnectGoogleCalendar,
+  fetchGoogleEventsForDate,
+  getGoogleAuthState,
+  isGoogleCalendarConfigured,
+  subscribeGoogleAuthState,
+  updateGoogleEvent,
+} from './utils/googleCalendar';
+import { AlertCircle, Bell, Navigation, X, ExternalLink } from 'lucide-react';
 
 export default function App() {
   // Meetings: user calendar starts empty unless loaded via sample or imported
@@ -102,6 +113,150 @@ export default function App() {
   // Modal state for Adding/Editing Meetings
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [meetingToEdit, setMeetingToEdit] = useState<CampusMeeting | null>(null);
+
+  // Google Calendar in-memory auth state
+  const [googleAuthState, setGoogleAuthState] = useState(() => getGoogleAuthState());
+  const [isGoogleBusy, setIsGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const pendingGoogleWritesRef = useRef(0);
+
+  useEffect(() => {
+    return subscribeGoogleAuthState(() => {
+      setGoogleAuthState(getGoogleAuthState());
+    });
+  }, []);
+
+  // Merge Google events for a target date:
+  // Replace only meetings that came from Google for that date (matched by googleEventId / questflow id).
+  // Never remove or duplicate meetings that didn't come from Google.
+  const mergeGoogleEventsForDate = useCallback(
+    (dateStr: string, loadedGoogleMeetings: CampusMeeting[]) => {
+      setMeetings((prev) => {
+        const existingByGoogleId = new Map<string, CampusMeeting>();
+        const existingById = new Map<string, CampusMeeting>();
+        for (const m of prev) {
+          existingById.set(m.id, m);
+          if (m.googleEventId) {
+            existingByGoogleId.set(m.googleEventId, m);
+          }
+        }
+
+        const loadedGoogleIds = new Set<string>();
+        const loadedQuestFlowIds = new Set<string>();
+        for (const gm of loadedGoogleMeetings) {
+          if (gm.googleEventId) loadedGoogleIds.add(gm.googleEventId);
+          loadedQuestFlowIds.add(gm.id);
+        }
+
+        const kept = prev.filter((m) => {
+          if (m.googleEventId && loadedGoogleIds.has(m.googleEventId)) {
+            return false;
+          }
+          if (loadedQuestFlowIds.has(m.id)) {
+            return false;
+          }
+          if (m.date === dateStr && m.googleEventId) {
+            return false;
+          }
+          return true;
+        });
+
+        const normalizedGoogle = loadedGoogleMeetings.map((gm) => {
+          const existing =
+            (gm.googleEventId ? existingByGoogleId.get(gm.googleEventId) : undefined) ||
+            existingById.get(gm.id);
+          if (!existing) return gm;
+          return {
+            ...gm,
+            id: existing.id,
+            format:
+              existing.questflowCreated &&
+              existing.format === 'hybrid' &&
+              !gm.isOnline
+                ? 'hybrid'
+                : gm.format,
+            onlineLink: existing.onlineLink || gm.onlineLink,
+          };
+        });
+
+        const combined = [...kept, ...normalizedGoogle];
+        combined.sort((a, b) => a.startTime.localeCompare(b.startTime));
+        return combined;
+      });
+    },
+    []
+  );
+
+  const loadGoogleEventsForDate = useCallback(
+    async (dateStr: string): Promise<number> => {
+      if (!getGoogleAuthState().isConnected) return 0;
+      const loaded = await fetchGoogleEventsForDate(dateStr);
+      mergeGoogleEventsForDate(dateStr, loaded);
+      return loaded.length;
+    },
+    [mergeGoogleEventsForDate]
+  );
+
+  // Reload Google Calendar events when selectedDate changes, when tab regains focus, and every 60s while visible
+  useEffect(() => {
+    if (!googleAuthState.isConnected) return;
+
+    const triggerReload = () => {
+      if (pendingGoogleWritesRef.current > 0) return;
+      if (!getGoogleAuthState().isConnected) return;
+      loadGoogleEventsForDate(selectedDate).catch((err: any) => {
+        setGoogleError(err?.message || 'Could not load Google Calendar events.');
+      });
+    };
+
+    triggerReload();
+
+    const handleFocus = () => {
+      triggerReload();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerReload();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        triggerReload();
+      }
+    }, 60000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(interval);
+    };
+  }, [googleAuthState.isConnected, selectedDate, loadGoogleEventsForDate]);
+
+  const handleConnectGoogle = async (): Promise<number> => {
+    setIsGoogleBusy(true);
+    setGoogleError(null);
+    try {
+      await connectGoogleCalendar();
+      setGoogleAuthState(getGoogleAuthState());
+      const count = await loadGoogleEventsForDate(selectedDate);
+      return count;
+    } catch (err: any) {
+      setGoogleError(err?.message || 'Could not connect Google Calendar.');
+      throw err;
+    } finally {
+      setIsGoogleBusy(false);
+    }
+  };
+
+  const handleDisconnectGoogle = () => {
+    disconnectGoogleCalendar();
+    setGoogleAuthState(getGoogleAuthState());
+    setGoogleError(null);
+  };
 
   // Active departure toast banner
   const [activeDepartureAlert, setActiveDepartureAlert] = useState<{
@@ -231,34 +386,125 @@ export default function App() {
 
   // Save Meeting (Add or Update)
   const handleSaveMeeting = (meeting: CampusMeeting) => {
-    const exists = meetings.some((m) => m.id === meeting.id);
-    let updated: CampusMeeting[];
-    if (exists) {
-      updated = meetings.map((m) => (m.id === meeting.id ? meeting : m));
+    const existing = meetings.find((m) => m.id === meeting.id);
+    const isConnected = getGoogleAuthState().isConnected;
+
+    if (existing) {
+      const merged: CampusMeeting = {
+        ...meeting,
+        googleEventId: existing.googleEventId,
+        questflowCreated: existing.questflowCreated,
+        source: existing.questflowCreated ? 'created' : meeting.source,
+      };
+      const updated = meetings
+        .map((m) => (m.id === meeting.id ? merged : m))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      setMeetings(updated);
+
+      if (isConnected && merged.googleEventId && merged.questflowCreated) {
+        pendingGoogleWritesRef.current += 1;
+        setGoogleError(null);
+        updateGoogleEvent(merged)
+          .catch((err: any) => {
+            setGoogleError(err?.message || 'Could not update meeting in Google Calendar.');
+          })
+          .finally(() => {
+            pendingGoogleWritesRef.current = Math.max(0, pendingGoogleWritesRef.current - 1);
+          });
+      }
     } else {
-      updated = [...meetings, meeting];
+      const createdMeeting: CampusMeeting = {
+        ...meeting,
+        source: 'created',
+        questflowCreated: isConnected ? true : undefined,
+      };
+      const updated = [...meetings, createdMeeting].sort((a, b) =>
+        a.startTime.localeCompare(b.startTime)
+      );
+      setMeetings(updated);
+
+      if (isConnected) {
+        pendingGoogleWritesRef.current += 1;
+        setGoogleError(null);
+        createGoogleEvent(createdMeeting)
+          .then((googleEventId) => {
+            setMeetings((prev) =>
+              prev.map((m) =>
+                m.id === createdMeeting.id
+                  ? { ...m, googleEventId, questflowCreated: true, source: 'created' }
+                  : m
+              )
+            );
+          })
+          .catch((err: any) => {
+            setGoogleError(err?.message || 'Could not save meeting to Google Calendar.');
+          })
+          .finally(() => {
+            pendingGoogleWritesRef.current = Math.max(0, pendingGoogleWritesRef.current - 1);
+          });
+      }
     }
-    updated.sort((a, b) => a.startTime.localeCompare(b.startTime));
-    setMeetings(updated);
   };
 
   // Delete Meeting
   const handleDeleteMeeting = (id: string) => {
+    const existing = meetings.find((m) => m.id === id);
     setMeetings(meetings.filter((m) => m.id !== id));
+
+    if (
+      existing &&
+      getGoogleAuthState().isConnected &&
+      existing.googleEventId &&
+      existing.questflowCreated
+    ) {
+      pendingGoogleWritesRef.current += 1;
+      setGoogleError(null);
+      deleteGoogleEvent(existing)
+        .catch((err: any) => {
+          setGoogleError(err?.message || 'Could not delete meeting from Google Calendar.');
+        })
+        .finally(() => {
+          pendingGoogleWritesRef.current = Math.max(0, pendingGoogleWritesRef.current - 1);
+        });
+    }
   };
 
   // 1-Click format toggle (in_person, online, hybrid)
   const handleQuickToggleFormat = (id: string, format: 'in_person' | 'online' | 'hybrid') => {
+    const existing = meetings.find((m) => m.id === id);
+    let targetUpdated: CampusMeeting | null = null;
     const updated = meetings.map((m) => {
       if (m.id !== id) return m;
-      return {
+      targetUpdated = {
         ...m,
         format,
         isOnline: format === 'online',
-        rawLocation: format === 'online' ? 'Microsoft Teams' : `${m.buildingCode || 'MC'} ${m.roomNumber || ''}`,
+        rawLocation:
+          format === 'online'
+            ? 'Microsoft Teams'
+            : `${m.buildingCode || 'MC'} ${m.roomNumber || ''}`,
       };
+      return targetUpdated;
     });
     setMeetings(updated);
+
+    if (
+      targetUpdated &&
+      existing &&
+      getGoogleAuthState().isConnected &&
+      existing.googleEventId &&
+      existing.questflowCreated
+    ) {
+      pendingGoogleWritesRef.current += 1;
+      setGoogleError(null);
+      updateGoogleEvent(targetUpdated)
+        .catch((err: any) => {
+          setGoogleError(err?.message || 'Could not update meeting in Google Calendar.');
+        })
+        .finally(() => {
+          pendingGoogleWritesRef.current = Math.max(0, pendingGoogleWritesRef.current - 1);
+        });
+    }
   };
 
   // Navigation handler
@@ -328,6 +574,25 @@ export default function App() {
 
       {/* Main Multi-Page Container */}
       <main className="flex-1">
+        {currentPage !== 'connect' && googleError && (
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4">
+            <div className="p-3.5 rounded-2xl bg-[var(--status-late-bg)] border border-[var(--status-late-fg)]/30 text-[var(--status-late-fg)] flex items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-[var(--status-late-fg)] shrink-0" />
+                <span className="font-semibold">{googleError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGoogleError(null)}
+                className="p-1 rounded-lg text-[var(--status-late-fg)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
+                aria-label="Dismiss notice"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {currentPage === 'welcome' && (
           <WelcomeHeroPage
             onStartSampleWalkthrough={handleStartSampleWalkthrough}
@@ -356,6 +621,13 @@ export default function App() {
               setCurrentPage('review');
             }}
             onBack={() => setCurrentPage(previousPage === 'review' ? 'review' : 'welcome')}
+            googleAuthState={googleAuthState}
+            isGoogleConfigured={isGoogleCalendarConfigured()}
+            isGoogleBusy={isGoogleBusy}
+            googleError={googleError}
+            onClearGoogleError={() => setGoogleError(null)}
+            onConnectGoogle={handleConnectGoogle}
+            onDisconnectGoogle={handleDisconnectGoogle}
           />
         )}
 

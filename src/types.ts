@@ -29,6 +29,8 @@ export interface CampusMeeting {
   rawLocation?: string;
   isOnline?: boolean;
   isUnparseableLocation?: boolean;
+  googleEventId?: string;
+  questflowCreated?: boolean;
 }
 
 // Backward-compatible alias
