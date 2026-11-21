@@ -1,6 +1,12 @@
 import { QuestMeeting, QuestSettings } from '../types';
 import { getOutdoorWalkEstimate } from '../data/uwaterlooCampus';
-import { parseTimeToMinutes, calculateFloorChangeSeconds } from './travelCalculator';
+import {
+  parseTimeToMinutes,
+  calculateFloorChangeSeconds,
+  hasKnownBuilding,
+  isMeetingLocationUnknown,
+  needsCampusTravel,
+} from './travelCalculator';
 
 export interface SuggestedSlot {
   startTime: string; // 'HH:MM'
@@ -31,7 +37,7 @@ export function calculateDeterministicTravelMinutes(
   fromRoomNumber?: string,
   toRoomNumber?: string
 ): number {
-  if (!fromBuilding || !toBuilding || fromBuilding === 'ONLINE' || toBuilding === 'ONLINE') {
+  if (!hasKnownBuilding(fromBuilding) || !hasKnownBuilding(toBuilding)) {
     return 0;
   }
 
@@ -140,7 +146,7 @@ export function findAvailableSlots(
 
     // Preceding side:
     // - prevAnyEvt: whichever meeting (in-person, hybrid, or online) ends last before `start`
-    // - prevPhysicalEvt: nearest preceding in-person/hybrid meeting ending before `start`
+    // - prevPhysicalEvt: nearest preceding in-person/hybrid meeting with a recognized building ending before `start`
     let prevAnyEvt: QuestMeeting | undefined;
     let prevPhysicalEvt: QuestMeeting | undefined;
     for (const e of sorted) {
@@ -149,8 +155,9 @@ export function findAvailableSlots(
         if (!prevAnyEvt || eEnd >= parseTimeToMinutes(prevAnyEvt.endTime)) {
           prevAnyEvt = e;
         }
-        const isOnline = e.format === 'online' || Boolean(e.isOnline);
-        if (!isOnline) {
+        if (isMeetingLocationUnknown(e)) {
+          prevPhysicalEvt = undefined;
+        } else if (needsCampusTravel(e)) {
           if (!prevPhysicalEvt || eEnd >= parseTimeToMinutes(prevPhysicalEvt.endTime)) {
             prevPhysicalEvt = e;
           }
@@ -160,7 +167,7 @@ export function findAvailableSlots(
 
     // Following side:
     // - nextAnyEvt: whichever meeting (in-person, hybrid, or online) starts first after `end`
-    // - nextPhysicalEvt: nearest following in-person/hybrid meeting starting after `end`
+    // - nextPhysicalEvt: nearest following in-person/hybrid meeting with a recognized building starting after `end`
     let nextAnyEvt: QuestMeeting | undefined;
     let nextPhysicalEvt: QuestMeeting | undefined;
     for (const e of sorted) {
@@ -169,18 +176,22 @@ export function findAvailableSlots(
         if (!nextAnyEvt || eStart < parseTimeToMinutes(nextAnyEvt.startTime)) {
           nextAnyEvt = e;
         }
-        const isOnline = e.format === 'online' || Boolean(e.isOnline);
-        if (!isOnline) {
-          if (!nextPhysicalEvt || eStart < parseTimeToMinutes(nextPhysicalEvt.startTime)) {
+        if (!nextPhysicalEvt) {
+          if (isMeetingLocationUnknown(e)) {
+            break;
+          }
+          if (needsCampusTravel(e)) {
             nextPhysicalEvt = e;
           }
         }
       }
     }
 
+    const targetNeedsTravel = !target.isOnline && hasKnownBuilding(target.buildingCode);
+
     // Travel from preceding physical building, starting after the last preceding meeting of any kind ends
     let travelBeforeMin = 0;
-    if (prevPhysicalEvt && prevAnyEvt && !target.isOnline) {
+    if (prevPhysicalEvt && prevAnyEvt && targetNeedsTravel) {
       travelBeforeMin = calculateDeterministicTravelMinutes(
         prevPhysicalEvt.buildingCode,
         prevPhysicalEvt.floor,
@@ -197,7 +208,7 @@ export function findAvailableSlots(
 
     // Travel toward following physical building, finishing before the next meeting of any kind starts
     let travelAfterMin = 0;
-    if (nextPhysicalEvt && nextAnyEvt && !target.isOnline) {
+    if (nextPhysicalEvt && nextAnyEvt && targetNeedsTravel) {
       travelAfterMin = calculateDeterministicTravelMinutes(
         target.buildingCode,
         target.floor,
@@ -357,8 +368,9 @@ export function validateSlotOrFindEarliest(
       if (!prevAnyEvt || eEnd >= parseTimeToMinutes(prevAnyEvt.endTime)) {
         prevAnyEvt = e;
       }
-      const isOnline = e.format === 'online' || Boolean(e.isOnline);
-      if (!isOnline) {
+      if (isMeetingLocationUnknown(e)) {
+        prevPhysicalEvt = undefined;
+      } else if (needsCampusTravel(e)) {
         if (!prevPhysicalEvt || eEnd >= parseTimeToMinutes(prevPhysicalEvt.endTime)) {
           prevPhysicalEvt = e;
         }
@@ -374,9 +386,11 @@ export function validateSlotOrFindEarliest(
       if (!nextAnyEvt || eStart < parseTimeToMinutes(nextAnyEvt.startTime)) {
         nextAnyEvt = e;
       }
-      const isOnline = e.format === 'online' || Boolean(e.isOnline);
-      if (!isOnline) {
-        if (!nextPhysicalEvt || eStart < parseTimeToMinutes(nextPhysicalEvt.startTime)) {
+      if (!nextPhysicalEvt) {
+        if (isMeetingLocationUnknown(e)) {
+          break;
+        }
+        if (needsCampusTravel(e)) {
           nextPhysicalEvt = e;
         }
       }
@@ -407,8 +421,10 @@ export function validateSlotOrFindEarliest(
     };
   }
 
+  const targetNeedsTravel = !target.isOnline && hasKnownBuilding(target.buildingCode);
+
   // Check travel from previous physical event (starting after last preceding event of any kind ends)
-  if (prevPhysicalEvt && prevAnyEvt && !target.isOnline) {
+  if (prevPhysicalEvt && prevAnyEvt && targetNeedsTravel) {
     const safeTravelBefore = calculateDeterministicTravelMinutes(
       prevPhysicalEvt.buildingCode,
       prevPhysicalEvt.floor,
@@ -433,7 +449,7 @@ export function validateSlotOrFindEarliest(
   }
 
   // Check travel to next physical event (finishing before next event of any kind starts)
-  if (nextPhysicalEvt && nextAnyEvt && !target.isOnline) {
+  if (nextPhysicalEvt && nextAnyEvt && targetNeedsTravel) {
     const safeTravelAfter = calculateDeterministicTravelMinutes(
       target.buildingCode,
       target.floor,

@@ -33,18 +33,100 @@ import {
 } from './utils/googleCalendar';
 import { AlertCircle, Bell, Navigation, X, ExternalLink } from 'lucide-react';
 
-export default function App() {
-  // Meetings: user calendar starts empty unless loaded via sample or imported
-  const [meetings, setMeetings] = useState<CampusMeeting[]>(() => {
-    try {
-      const saved = localStorage.getItem('questflow_meetings_v6');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+export type CalendarSourceMode = 'tutorial' | 'google' | 'file' | null;
+
+function readInitialSourceBuckets(): {
+  googleMeetings: CampusMeeting[];
+  fileMeetings: CampusMeeting[];
+  activeSource: CalendarSourceMode;
+} {
+  let googleMeetings: CampusMeeting[] = [];
+  let fileMeetings: CampusMeeting[] = [];
+  let activeSource: CalendarSourceMode = null;
+
+  try {
+    const savedGoogle = localStorage.getItem('questflow_google_meetings_v6');
+    const savedFile = localStorage.getItem('questflow_file_meetings_v6');
+    const savedSource = localStorage.getItem('questflow_active_source_v6');
+
+    if (savedGoogle) {
+      const parsed = JSON.parse(savedGoogle);
+      if (Array.isArray(parsed)) googleMeetings = parsed;
+    }
+    if (savedFile) {
+      const parsed = JSON.parse(savedFile);
+      if (Array.isArray(parsed)) fileMeetings = parsed;
+    }
+
+    // Legacy migration if separate buckets haven't been initialized yet
+    if (!savedGoogle && !savedFile) {
+      const legacy = localStorage.getItem('questflow_meetings_v6');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed)) {
+          googleMeetings = parsed.filter((m: CampusMeeting) => Boolean(m.googleEventId));
+          fileMeetings = parsed.filter(
+            (m: CampusMeeting) => !m.googleEventId && m.source !== 'sample'
+          );
+        }
       }
-    } catch {}
-    return [];
-  });
+    }
+
+    if (getGoogleAuthState().isConnected) {
+      activeSource = 'google';
+    } else if (savedSource === 'file' && fileMeetings.length > 0) {
+      activeSource = 'file';
+    } else if (savedSource === 'google' && googleMeetings.length > 0) {
+      activeSource = 'google';
+    } else if (fileMeetings.length > 0) {
+      activeSource = 'file';
+    } else if (googleMeetings.length > 0) {
+      activeSource = 'google';
+    }
+  } catch {}
+
+  return { googleMeetings, fileMeetings, activeSource };
+}
+
+export default function App() {
+  const initialBucketsRef = useRef(readInitialSourceBuckets());
+
+  // Separate meeting stores per source:
+  // - tutorialMeetings: in-memory only, discarded when leaving tutorial
+  // - googleMeetings: stored separately in localStorage
+  // - fileMeetings: stored separately in localStorage (.ics, link, pasted text)
+  const [tutorialMeetings, setTutorialMeetings] = useState<CampusMeeting[]>([]);
+  const [googleMeetings, setGoogleMeetings] = useState<CampusMeeting[]>(
+    () => initialBucketsRef.current.googleMeetings
+  );
+  const [fileMeetings, setFileMeetings] = useState<CampusMeeting[]>(
+    () => initialBucketsRef.current.fileMeetings
+  );
+  const [activeSource, setActiveSource] = useState<CalendarSourceMode>(
+    () => initialBucketsRef.current.activeSource
+  );
+
+  const meetings =
+    activeSource === 'tutorial'
+      ? tutorialMeetings
+      : activeSource === 'google'
+      ? googleMeetings
+      : activeSource === 'file'
+      ? fileMeetings
+      : [];
+
+  const updateActiveMeetings = useCallback(
+    (updater: (prev: CampusMeeting[]) => CampusMeeting[]) => {
+      if (activeSource === 'tutorial') {
+        setTutorialMeetings(updater);
+      } else if (activeSource === 'google') {
+        setGoogleMeetings(updater);
+      } else if (activeSource === 'file') {
+        setFileMeetings(updater);
+      }
+    },
+    [activeSource]
+  );
 
   // Page Stepper navigation state:
   // - First-run visitors land on 'welcome'
@@ -56,12 +138,12 @@ export default function App() {
       if (!hasVisited) {
         return 'welcome';
       }
-      const savedMeetingsRaw = localStorage.getItem('questflow_meetings_v6');
-      if (savedMeetingsRaw) {
-        const parsed = JSON.parse(savedMeetingsRaw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return 'review';
-        }
+      const init = initialBucketsRef.current;
+      if (
+        (init.activeSource === 'google' && init.googleMeetings.length > 0) ||
+        (init.activeSource === 'file' && init.fileMeetings.length > 0)
+      ) {
+        return 'review';
       }
       const savedPage = localStorage.getItem('questflow_page_v6');
       if (savedPage && ['welcome', 'connect', 'review'].includes(savedPage)) {
@@ -126,12 +208,11 @@ export default function App() {
     });
   }, []);
 
-  // Merge Google events for a target date:
-  // Replace only meetings that came from Google for that date (matched by googleEventId / questflow id).
-  // Never remove or duplicate meetings that didn't come from Google.
+  // Merge Google events into googleMeetings for a target date:
+  // Replace only Google events for that date (matched by googleEventId / questflow id).
   const mergeGoogleEventsForDate = useCallback(
     (dateStr: string, loadedGoogleMeetings: CampusMeeting[]) => {
-      setMeetings((prev) => {
+      setGoogleMeetings((prev) => {
         const existingByGoogleId = new Map<string, CampusMeeting>();
         const existingById = new Map<string, CampusMeeting>();
         for (const m of prev) {
@@ -155,7 +236,7 @@ export default function App() {
           if (loadedQuestFlowIds.has(m.id)) {
             return false;
           }
-          if (m.date === dateStr && m.googleEventId) {
+          if (m.date === dateStr) {
             return false;
           }
           return true;
@@ -198,8 +279,9 @@ export default function App() {
   );
 
   // Reload Google Calendar events when selectedDate changes, when tab regains focus, and every 60s while visible
+  // Paused in Tutorial mode or File mode (only active when activeSource === 'google')
   useEffect(() => {
-    if (!googleAuthState.isConnected) return;
+    if (!googleAuthState.isConnected || activeSource !== 'google') return;
 
     const triggerReload = () => {
       if (pendingGoogleWritesRef.current > 0) return;
@@ -234,7 +316,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(interval);
     };
-  }, [googleAuthState.isConnected, selectedDate, loadGoogleEventsForDate]);
+  }, [googleAuthState.isConnected, activeSource, selectedDate, loadGoogleEventsForDate]);
 
   const handleConnectGoogle = async (): Promise<number> => {
     setIsGoogleBusy(true);
@@ -242,6 +324,8 @@ export default function App() {
     try {
       await connectGoogleCalendar();
       setGoogleAuthState(getGoogleAuthState());
+      setTutorialMeetings([]);
+      setActiveSource('google');
       const count = await loadGoogleEventsForDate(selectedDate);
       return count;
     } catch (err: any) {
@@ -256,6 +340,9 @@ export default function App() {
     disconnectGoogleCalendar();
     setGoogleAuthState(getGoogleAuthState());
     setGoogleError(null);
+    if (activeSource === 'google') {
+      setActiveSource(fileMeetings.length > 0 ? 'file' : null);
+    }
   };
 
   // Active departure toast banner
@@ -268,15 +355,21 @@ export default function App() {
     travelMinutes: number;
   } | null>(null);
 
-  // Persist to localStorage
+  // Persist separate source buckets to localStorage (tutorial meetings are never persisted)
   useEffect(() => {
     try {
-      localStorage.setItem('questflow_meetings_v6', JSON.stringify(meetings));
+      localStorage.setItem('questflow_google_meetings_v6', JSON.stringify(googleMeetings));
+      localStorage.setItem('questflow_file_meetings_v6', JSON.stringify(fileMeetings));
+      if (activeSource === 'google' || activeSource === 'file') {
+        localStorage.setItem('questflow_active_source_v6', activeSource);
+      } else if (activeSource === null) {
+        localStorage.removeItem('questflow_active_source_v6');
+      }
       localStorage.setItem('questflow_date_v6', selectedDate);
       localStorage.setItem('questflow_settings_v6', JSON.stringify(settings));
       localStorage.setItem('questflow_page_v6', currentPage);
     } catch {}
-  }, [meetings, selectedDate, settings, currentPage]);
+  }, [googleMeetings, fileMeetings, activeSource, selectedDate, settings, currentPage]);
 
   // Close Next Up modal on Escape & trap focus inside dialog
   useEffect(() => {
@@ -359,17 +452,30 @@ export default function App() {
     return () => clearInterval(interval);
   }, [meetings, settings]);
 
-  // Load UW Sample walkthrough and open Calendar
+  // Load UW Sample walkthrough and open Calendar (Tutorial mode)
   const handleStartSampleWalkthrough = () => {
     const todayStr = getTodayLocalDateString();
     setSelectedDate(todayStr);
     const sample = getSampleDayMeetings(todayStr);
-    setMeetings(sample);
+    setTutorialMeetings(sample);
+    setActiveSource('tutorial');
     setSettings((prev) => ({
       ...prev,
       office: prev.office ?? SAMPLE_DEFAULT_OFFICE,
     }));
     setCurrentPage('review');
+  };
+
+  // Exit tutorial mode: discard tutorial meetings, return to Google mode if connected, else Sync Calendar page
+  const handleExitTutorial = () => {
+    setTutorialMeetings([]);
+    if (getGoogleAuthState().isConnected) {
+      setActiveSource('google');
+      setCurrentPage('review');
+    } else {
+      setActiveSource(fileMeetings.length > 0 ? 'file' : null);
+      setCurrentPage('connect');
+    }
   };
 
   // Open Edit Meeting Modal
@@ -384,10 +490,19 @@ export default function App() {
     setIsMeetingModalOpen(true);
   };
 
-  // Save Meeting (Add or Update)
+  // Save Meeting (Add or Update) in the currently active source
   const handleSaveMeeting = (meeting: CampusMeeting) => {
+    const targetSource: 'tutorial' | 'google' | 'file' =
+      activeSource || (getGoogleAuthState().isConnected ? 'google' : 'file');
+
+    if (!activeSource) {
+      setActiveSource(targetSource);
+    }
+
+    const isGoogleModeConnected =
+      targetSource === 'google' && getGoogleAuthState().isConnected;
+
     const existing = meetings.find((m) => m.id === meeting.id);
-    const isConnected = getGoogleAuthState().isConnected;
 
     if (existing) {
       const merged: CampusMeeting = {
@@ -396,12 +511,16 @@ export default function App() {
         questflowCreated: existing.questflowCreated,
         source: existing.questflowCreated ? 'created' : meeting.source,
       };
-      const updated = meetings
-        .map((m) => (m.id === meeting.id ? merged : m))
-        .sort((a, b) => a.startTime.localeCompare(b.startTime));
-      setMeetings(updated);
+      const applyUpdate = (prev: CampusMeeting[]) =>
+        prev
+          .map((m) => (m.id === meeting.id ? merged : m))
+          .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-      if (isConnected && merged.googleEventId && merged.questflowCreated) {
+      if (targetSource === 'tutorial') setTutorialMeetings(applyUpdate);
+      else if (targetSource === 'google') setGoogleMeetings(applyUpdate);
+      else setFileMeetings(applyUpdate);
+
+      if (isGoogleModeConnected && merged.googleEventId && merged.questflowCreated) {
         pendingGoogleWritesRef.current += 1;
         setGoogleError(null);
         updateGoogleEvent(merged)
@@ -416,19 +535,21 @@ export default function App() {
       const createdMeeting: CampusMeeting = {
         ...meeting,
         source: 'created',
-        questflowCreated: isConnected ? true : undefined,
+        questflowCreated: isGoogleModeConnected ? true : undefined,
       };
-      const updated = [...meetings, createdMeeting].sort((a, b) =>
-        a.startTime.localeCompare(b.startTime)
-      );
-      setMeetings(updated);
+      const applyAdd = (prev: CampusMeeting[]) =>
+        [...prev, createdMeeting].sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-      if (isConnected) {
+      if (targetSource === 'tutorial') setTutorialMeetings(applyAdd);
+      else if (targetSource === 'google') setGoogleMeetings(applyAdd);
+      else setFileMeetings(applyAdd);
+
+      if (isGoogleModeConnected) {
         pendingGoogleWritesRef.current += 1;
         setGoogleError(null);
         createGoogleEvent(createdMeeting)
           .then((googleEventId) => {
-            setMeetings((prev) =>
+            setGoogleMeetings((prev) =>
               prev.map((m) =>
                 m.id === createdMeeting.id
                   ? { ...m, googleEventId, questflowCreated: true, source: 'created' }
@@ -446,12 +567,13 @@ export default function App() {
     }
   };
 
-  // Delete Meeting
+  // Delete Meeting in the currently active source
   const handleDeleteMeeting = (id: string) => {
     const existing = meetings.find((m) => m.id === id);
-    setMeetings(meetings.filter((m) => m.id !== id));
+    updateActiveMeetings((prev) => prev.filter((m) => m.id !== id));
 
     if (
+      activeSource === 'google' &&
       existing &&
       getGoogleAuthState().isConnected &&
       existing.googleEventId &&
@@ -469,26 +591,28 @@ export default function App() {
     }
   };
 
-  // 1-Click format toggle (in_person, online, hybrid)
+  // 1-Click format toggle (in_person, online, hybrid) in the currently active source
   const handleQuickToggleFormat = (id: string, format: 'in_person' | 'online' | 'hybrid') => {
     const existing = meetings.find((m) => m.id === id);
     let targetUpdated: CampusMeeting | null = null;
-    const updated = meetings.map((m) => {
-      if (m.id !== id) return m;
-      targetUpdated = {
-        ...m,
-        format,
-        isOnline: format === 'online',
-        rawLocation:
-          format === 'online'
-            ? 'Microsoft Teams'
-            : `${m.buildingCode || 'MC'} ${m.roomNumber || ''}`,
-      };
-      return targetUpdated;
-    });
-    setMeetings(updated);
+    updateActiveMeetings((prev) =>
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        targetUpdated = {
+          ...m,
+          format,
+          isOnline: format === 'online',
+          rawLocation:
+            format === 'online'
+              ? 'Microsoft Teams'
+              : `${m.buildingCode || 'MC'} ${m.roomNumber || ''}`,
+        };
+        return targetUpdated;
+      })
+    );
 
     if (
+      activeSource === 'google' &&
       targetUpdated &&
       existing &&
       getGoogleAuthState().isConnected &&
@@ -608,13 +732,22 @@ export default function App() {
             currentMeetings={meetings}
             selectedDate={selectedDate}
             onSetMeetings={(newMeetings, isSample) => {
-              setMeetings(newMeetings);
               if (isSample) {
+                setTutorialMeetings(newMeetings);
+                setActiveSource('tutorial');
                 setSettings((prev) => ({
                   ...prev,
                   office: prev.office ?? SAMPLE_DEFAULT_OFFICE,
                 }));
+              } else {
+                setTutorialMeetings([]);
+                setFileMeetings(newMeetings);
+                setActiveSource('file');
               }
+            }}
+            onActivateGoogleSource={() => {
+              setTutorialMeetings([]);
+              setActiveSource('google');
             }}
             onContinue={() => {
               setPreviousPage('connect');
@@ -647,6 +780,9 @@ export default function App() {
             onUpdateOffice={(office: UserOffice | null) =>
               setSettings((prev) => ({ ...prev, office }))
             }
+            activeSource={activeSource}
+            googleEmail={googleAuthState.email}
+            onExitTutorial={handleExitTutorial}
           />
         )}
       </main>

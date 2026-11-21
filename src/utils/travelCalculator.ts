@@ -1,11 +1,61 @@
 import {
   CampusMeeting,
   CampusSettings,
+  MeetingFormat,
   TravelBreakdown,
   TravelLeg,
   TravelStatus,
 } from '../types';
-import { getOutdoorWalkEstimate } from '../data/uwaterlooCampus';
+import { getOutdoorWalkEstimate, UW_BUILDINGS } from '../data/uwaterlooCampus';
+
+export function hasKnownBuilding(buildingCode?: string | null): boolean {
+  if (!buildingCode) return false;
+  const normalized = buildingCode.trim().toUpperCase();
+  if (!normalized || normalized === 'ONLINE') return false;
+  return Boolean(UW_BUILDINGS[normalized]);
+}
+
+export function isMeetingOnline(
+  meeting?: Pick<CampusMeeting, 'format' | 'isOnline' | 'buildingCode'> | null
+): boolean {
+  if (!meeting) return false;
+  return (
+    meeting.format === 'online' ||
+    Boolean(meeting.isOnline) ||
+    meeting.buildingCode?.trim().toUpperCase() === 'ONLINE'
+  );
+}
+
+export function isMeetingLocationUnknown(
+  meeting?: Pick<
+    CampusMeeting,
+    'format' | 'isOnline' | 'buildingCode' | 'isUnparseableLocation'
+  > | null
+): boolean {
+  if (!meeting) return true;
+  if (isMeetingOnline(meeting)) return false;
+  return Boolean(meeting.isUnparseableLocation) || !hasKnownBuilding(meeting.buildingCode);
+}
+
+export function needsCampusTravel(
+  meeting?: Pick<
+    CampusMeeting,
+    'format' | 'isOnline' | 'buildingCode' | 'isUnparseableLocation'
+  > | null
+): boolean {
+  if (!meeting) return false;
+  return !isMeetingOnline(meeting) && !isMeetingLocationUnknown(meeting);
+}
+
+export function formatBuildingRoomLabel(
+  buildingCode?: string | null,
+  roomNumber?: string | null
+): string {
+  const b = (buildingCode || '').trim().toUpperCase();
+  if (!hasKnownBuilding(b)) return '';
+  const r = (roomNumber || '').trim();
+  return r ? `${b} ${r}` : b;
+}
 
 export function parseTimeToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
@@ -84,6 +134,17 @@ export function calculateBuildingToBuildingSeconds(
   isSameRoom: boolean;
   bufferMinutes: number;
 } {
+  if (!hasKnownBuilding(fromBuildingCode) || !hasKnownBuilding(toBuildingCode)) {
+    return {
+      totalSeconds: 0,
+      totalMinutes: 0,
+      rawWalkMinutes: 0,
+      isSameBuilding: false,
+      isSameRoom: false,
+      bufferMinutes: 0,
+    };
+  }
+
   const isSame =
     Boolean(fromBuildingCode) &&
     Boolean(toBuildingCode) &&
@@ -182,8 +243,7 @@ export function getDepartureForMeeting(
   previousMeeting: CampusMeeting | null | undefined,
   settings: CampusSettings
 ): MeetingDepartureInfo {
-  const isOnline = meeting.format === 'online' || Boolean(meeting.isOnline);
-  if (isOnline || !meeting.buildingCode || meeting.buildingCode === 'ONLINE') {
+  if (!needsCampusTravel(meeting)) {
     return {
       hasOrigin: false,
       originLabel: '',
@@ -200,17 +260,13 @@ export function getDepartureForMeeting(
     };
   }
 
-  const bufferMinutes = settings.arrivalBufferMinutes ?? 5;
   const startMin = parseTimeToMinutes(meeting.startTime);
-  const office = settings.office?.buildingCode ? settings.office : null;
+  const office =
+    settings.office?.buildingCode && hasKnownBuilding(settings.office.buildingCode)
+      ? settings.office
+      : null;
 
-  const hasValidPrev = Boolean(
-    previousMeeting &&
-      previousMeeting.format !== 'online' &&
-      !previousMeeting.isOnline &&
-      previousMeeting.buildingCode &&
-      previousMeeting.buildingCode !== 'ONLINE'
-  );
+  const hasValidPrev = needsCampusTravel(previousMeeting);
 
   // Case 1: First in-person meeting of the day
   if (!hasValidPrev || !previousMeeting) {
@@ -377,20 +433,19 @@ export function getDepartureForMeeting(
 export function calculateTravelLeg(
   fromMeeting: CampusMeeting,
   toMeeting: CampusMeeting,
-  settings: CampusSettings
+  settings: CampusSettings,
+  departAfterTime?: string
 ): TravelLeg {
   const id = `leg-${fromMeeting.id}-${toMeeting.id}`;
 
-  const fromEndMin = parseTimeToMinutes(fromMeeting.endTime);
+  const fromEndMin = parseTimeToMinutes(departAfterTime || fromMeeting.endTime);
   const toStartMin = parseTimeToMinutes(toMeeting.startTime);
   const gapMinutes = toStartMin - fromEndMin;
   const gapSeconds = gapMinutes * 60;
   const bufferMinutes = settings.arrivalBufferMinutes ?? 5;
 
-  // Check if purely online
-  const isFromOnline = fromMeeting.format === 'online';
-  const isToOnline = toMeeting.format === 'online';
-  const isNoPhysicalTravel = isFromOnline && isToOnline;
+  // Check if either meeting is online or has an unknown location (no recognized building)
+  const isNoPhysicalTravel = !needsCampusTravel(fromMeeting) || !needsCampusTravel(toMeeting);
 
   if (isNoPhysicalTravel) {
     const emptyBreakdown: TravelBreakdown = {
@@ -426,7 +481,7 @@ export function calculateTravelLeg(
       minutesLate: 0,
       mapsWouldFit: false,
       isSameBuilding: false,
-      isOnline: true,
+      isOnline: isMeetingOnline(fromMeeting) || isMeetingOnline(toMeeting),
       breakdown: emptyBreakdown,
     };
   }
@@ -592,5 +647,225 @@ export function calculateTravelLeg(
     isOnline: false,
     mapsWouldFit,
     breakdown,
+  };
+}
+
+export interface CandidateTravelEvaluation {
+  warning: string | null;
+  isImpossible: boolean;
+  needsWorkingSlots: boolean;
+}
+
+/**
+ * Shared validation for the Add/Edit Meeting form:
+ * - Online and location-unknown meetings still block their own time against overlaps.
+ * - Online and location-unknown meetings never need a walk to or from them.
+ * - When an online meeting sits between two in-person meetings in different buildings,
+ *   the walk is measured from the earlier in-person building, starts after the online
+ *   meeting ends, and must finish before the next meeting of any kind starts.
+ * - Warning sentences are never built with an empty building or room.
+ */
+export function evaluateMeetingTravelWarnings(
+  candidate: {
+    startTime: string;
+    endTime: string;
+    format: MeetingFormat;
+    buildingCode: string;
+    roomNumber: string;
+    floor: number;
+  },
+  sameDayMeetings: CampusMeeting[],
+  settings: CampusSettings
+): CandidateTravelEvaluation {
+  const startMin = parseTimeToMinutes(candidate.startTime);
+  const endMin = parseTimeToMinutes(candidate.endTime);
+
+  if (endMin <= startMin) {
+    return {
+      warning: 'End time must be after start time.',
+      isImpossible: false,
+      needsWorkingSlots: false,
+    };
+  }
+
+  // 1. Overlap check against all meetings (in-person, hybrid, online, and location-unknown)
+  const overlapping = sameDayMeetings.find((m) => {
+    const s = parseTimeToMinutes(m.startTime);
+    const e = parseTimeToMinutes(m.endTime);
+    return startMin < e && endMin > s;
+  });
+
+  if (overlapping) {
+    return {
+      warning: `Time overlaps with "${overlapping.title}" (${formatTime12h(
+        overlapping.startTime
+      )}–${formatTime12h(overlapping.endTime)}).`,
+      isImpossible: true,
+      needsWorkingSlots: true,
+    };
+  }
+
+  // 2. Online or location-unknown candidate never needs a walk to or from it
+  if (candidate.format === 'online' || !hasKnownBuilding(candidate.buildingCode)) {
+    return {
+      warning: null,
+      isImpossible: false,
+      needsWorkingSlots: false,
+    };
+  }
+
+  const currentLocLabel = formatBuildingRoomLabel(
+    candidate.buildingCode,
+    candidate.roomNumber
+  );
+  if (!currentLocLabel) {
+    return {
+      warning: null,
+      isImpossible: false,
+      needsWorkingSlots: false,
+    };
+  }
+
+  const sorted = [...sameDayMeetings].sort(
+    (a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+  );
+
+  // Find nearest preceding physical meeting and last preceding meeting of any kind
+  let prevAnyEvt: CampusMeeting | undefined;
+  let prevPhysicalEvt: CampusMeeting | undefined;
+  for (const e of sorted) {
+    const eEnd = parseTimeToMinutes(e.endTime);
+    if (eEnd <= startMin) {
+      if (!prevAnyEvt || eEnd >= parseTimeToMinutes(prevAnyEvt.endTime)) {
+        prevAnyEvt = e;
+      }
+      if (isMeetingLocationUnknown(e)) {
+        prevPhysicalEvt = undefined;
+      } else if (needsCampusTravel(e)) {
+        if (!prevPhysicalEvt || eEnd >= parseTimeToMinutes(prevPhysicalEvt.endTime)) {
+          prevPhysicalEvt = e;
+        }
+      }
+    }
+  }
+
+  // Find nearest following physical meeting and earliest following meeting of any kind
+  let nextAnyEvt: CampusMeeting | undefined;
+  let nextPhysicalEvt: CampusMeeting | undefined;
+  for (const e of sorted) {
+    const eStart = parseTimeToMinutes(e.startTime);
+    if (eStart >= endMin) {
+      if (!nextAnyEvt || eStart < parseTimeToMinutes(nextAnyEvt.startTime)) {
+        nextAnyEvt = e;
+      }
+      if (!nextPhysicalEvt) {
+        if (isMeetingLocationUnknown(e)) {
+          break;
+        }
+        if (needsCampusTravel(e)) {
+          nextPhysicalEvt = e;
+        }
+      }
+    }
+  }
+
+  const articleFor = (n: number) => (n === 8 || n === 11 || n === 18 ? 'an' : 'a');
+  let impossibleMsg: string | null = null;
+  let tightMsg: string | null = null;
+
+  // Check transition from preceding in-person meeting (walk starts after prevAnyEvt ends)
+  if (prevPhysicalEvt && prevAnyEvt) {
+    const priorLocLabel = formatBuildingRoomLabel(
+      prevPhysicalEvt.buildingCode,
+      prevPhysicalEvt.roomNumber
+    );
+    if (priorLocLabel) {
+      const priorEnd = parseTimeToMinutes(prevAnyEvt.endTime);
+      const gap = startMin - priorEnd;
+      const calc = calculateBuildingToBuildingSeconds(
+        prevPhysicalEvt.buildingCode,
+        prevPhysicalEvt.floor || 1,
+        candidate.buildingCode,
+        candidate.floor,
+        settings,
+        prevPhysicalEvt.roomNumber,
+        candidate.roomNumber.trim()
+      );
+      const neededTravel = calc.totalMinutes;
+      const effectiveBuffer = calc.bufferMinutes;
+
+      if (!calc.isSameRoom && neededTravel > 0) {
+        if (gap < neededTravel) {
+          impossibleMsg = `You can't get from ${priorLocLabel} to ${currentLocLabel} by ${formatTime12h(
+            candidate.startTime
+          )} — it's ${articleFor(neededTravel)} ${neededTravel} min walk and you have ${gap}.`;
+        } else if (gap < neededTravel + effectiveBuffer) {
+          tightMsg = `You can't comfortably get from ${priorLocLabel} to ${currentLocLabel} by ${formatTime12h(
+            candidate.startTime
+          )} — it's ${articleFor(
+            neededTravel
+          )} ${neededTravel} min walk (+${effectiveBuffer} min buffer) and you have ${gap}.`;
+        }
+      }
+    }
+  }
+
+  // Check transition to following in-person meeting (walk must finish before nextAnyEvt starts)
+  if (nextPhysicalEvt && nextAnyEvt) {
+    const nextLocLabel = formatBuildingRoomLabel(
+      nextPhysicalEvt.buildingCode,
+      nextPhysicalEvt.roomNumber
+    );
+    if (nextLocLabel) {
+      const nextStart = parseTimeToMinutes(nextAnyEvt.startTime);
+      const gap = nextStart - endMin;
+      const calc = calculateBuildingToBuildingSeconds(
+        candidate.buildingCode,
+        candidate.floor,
+        nextPhysicalEvt.buildingCode,
+        nextPhysicalEvt.floor || 1,
+        settings,
+        candidate.roomNumber.trim(),
+        nextPhysicalEvt.roomNumber
+      );
+      const neededTravel = calc.totalMinutes;
+      const effectiveBuffer = calc.bufferMinutes;
+
+      if (!calc.isSameRoom && neededTravel > 0) {
+        if (gap < neededTravel && !impossibleMsg) {
+          impossibleMsg = `You can't get from ${currentLocLabel} to ${nextLocLabel} by ${formatTime12h(
+            nextAnyEvt.startTime
+          )} — it's ${articleFor(neededTravel)} ${neededTravel} min walk and you have ${gap}.`;
+        } else if (gap < neededTravel + effectiveBuffer && !impossibleMsg && !tightMsg) {
+          tightMsg = `You can't comfortably get from ${currentLocLabel} to ${nextLocLabel} by ${formatTime12h(
+            nextAnyEvt.startTime
+          )} — it's ${articleFor(
+            neededTravel
+          )} ${neededTravel} min walk (+${effectiveBuffer} min buffer) and you have ${gap}.`;
+        }
+      }
+    }
+  }
+
+  if (impossibleMsg) {
+    return {
+      warning: impossibleMsg,
+      isImpossible: true,
+      needsWorkingSlots: true,
+    };
+  }
+
+  if (tightMsg) {
+    return {
+      warning: tightMsg,
+      isImpossible: false,
+      needsWorkingSlots: true,
+    };
+  }
+
+  return {
+    warning: null,
+    isImpossible: false,
+    needsWorkingSlots: false,
   };
 }

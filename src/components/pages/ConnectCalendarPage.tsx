@@ -20,6 +20,7 @@ interface ConnectCalendarPageProps {
   currentMeetings: CampusMeeting[];
   selectedDate: string;
   onSetMeetings: (meetings: CampusMeeting[], isSample?: boolean) => void;
+  onActivateGoogleSource?: () => void;
   onContinue: () => void;
   onBack: () => void;
   googleAuthState: {
@@ -39,6 +40,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   currentMeetings,
   selectedDate,
   onSetMeetings,
+  onActivateGoogleSource,
   onContinue,
   onBack,
   googleAuthState,
@@ -243,6 +245,9 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
     if (!hasMeetings) {
       setErrorNotice('No meetings have been inputted yet. Please connect an Outlook link, upload a .ics file, or paste text to continue.');
       return;
+    }
+    if (activeTab === 'google' && googleAuthState.isConnected) {
+      onActivateGoogleSource?.();
     }
     setErrorNotice(null);
     onContinue();

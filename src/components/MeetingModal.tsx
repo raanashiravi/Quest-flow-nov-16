@@ -7,9 +7,9 @@ import {
 import { UW_BUILDINGS } from '../data/uwaterlooCampus';
 import {
   parseTimeToMinutes,
-  calculateBuildingToBuildingSeconds,
-  formatMinutesToTime,
   formatTime12h,
+  evaluateMeetingTravelWarnings,
+  hasKnownBuilding,
 } from '../utils/travelCalculator';
 import { findAvailableSlots, SuggestedSlot } from '../utils/slotFinder';
 import { X, Trash2, AlertTriangle, Check, Building2, Video, Users } from 'lucide-react';
@@ -95,7 +95,9 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       setStartTime(meetingToEdit.startTime);
       setEndTime(meetingToEdit.endTime);
       setFormat(meetingToEdit.format || (meetingToEdit.isOnline ? 'online' : 'in_person'));
-      setBuildingCode(meetingToEdit.buildingCode || 'MC');
+      setBuildingCode(
+        hasKnownBuilding(meetingToEdit.buildingCode) ? meetingToEdit.buildingCode : 'MC'
+      );
       setRoomNumber(meetingToEdit.roomNumber || '2018');
       setFloor(meetingToEdit.floor || 2);
       setOnlineLink(meetingToEdit.onlineLink || '');
@@ -188,20 +190,28 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
     const startMin = parseTimeToMinutes(startTime);
     const endMin = parseTimeToMinutes(endTime);
-
-    if (endMin <= startMin) {
-      setTravelWarning('End time must be after start time.');
-      setIsImpossible(false);
-      setWorkingSlots([]);
-      return;
-    }
-
     const durationMinutes = Math.max(15, endMin - startMin);
     const sameDay = existingMeetings.filter(
       (m) => m.date === date && (!meetingToEdit || m.id !== meetingToEdit.id)
     );
 
-    const computeWorkingSlots = () => {
+    const evalResult = evaluateMeetingTravelWarnings(
+      {
+        startTime,
+        endTime,
+        format,
+        buildingCode,
+        roomNumber,
+        floor,
+      },
+      sameDay,
+      settings
+    );
+
+    setTravelWarning(evalResult.warning);
+    setIsImpossible(evalResult.isImpossible);
+
+    if (evalResult.needsWorkingSlots) {
       const target = {
         buildingCode: format === 'online' ? 'ONLINE' : buildingCode,
         roomNumber: format === 'online' ? '' : roomNumber.trim(),
@@ -209,125 +219,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         isOnline: format === 'online',
         durationMinutes,
       };
-      return findAvailableSlots(sameDay, target, settings, '08:00', '18:00', undefined, date);
-    };
-
-    // Check overlap
-    const overlapping = sameDay.find((m) => {
-      const s = parseTimeToMinutes(m.startTime);
-      const e = parseTimeToMinutes(m.endTime);
-      return startMin < e && endMin > s;
-    });
-
-    if (overlapping) {
-      setTravelWarning(
-        `Time overlaps with "${overlapping.title}" (${formatTime12h(
-          overlapping.startTime
-        )}–${formatTime12h(overlapping.endTime)}).`
+      setWorkingSlots(
+        findAvailableSlots(sameDay, target, settings, '08:00', '18:00', undefined, date)
       );
-      setIsImpossible(true);
-      setWorkingSlots(computeWorkingSlots());
-      return;
-    }
-
-    if (format === 'online') {
-      setTravelWarning(null);
-      setIsImpossible(false);
+    } else {
       setWorkingSlots([]);
-      return;
     }
-
-    const sorted = [...sameDay].sort((a, b) => a.startTime.localeCompare(b.startTime));
-    const prior = [...sorted].reverse().find((m) => parseTimeToMinutes(m.endTime) <= startMin);
-    const next = sorted.find((m) => parseTimeToMinutes(m.startTime) >= endMin);
-
-    const currentLocLabel = `${buildingCode}${roomNumber.trim() ? ` ${roomNumber.trim()}` : ''}`;
-    const articleFor = (n: number) => (n === 8 || n === 11 || n === 18 ? 'an' : 'a');
-
-    let impossibleMsg: string | null = null;
-    let tightMsg: string | null = null;
-
-    // 1. Check transition from preceding meeting
-    if (prior && prior.format !== 'online' && !prior.isOnline) {
-      const priorEnd = parseTimeToMinutes(prior.endTime);
-      const gap = startMin - priorEnd;
-      const calc = calculateBuildingToBuildingSeconds(
-        prior.buildingCode,
-        prior.floor || 1,
-        buildingCode,
-        floor,
-        settings,
-        prior.roomNumber,
-        roomNumber.trim()
-      );
-      const neededTravel = calc.totalMinutes;
-      const effectiveBuffer = calc.bufferMinutes;
-      const priorLocLabel = `${prior.buildingCode}${prior.roomNumber ? ` ${prior.roomNumber}` : ''}`;
-
-      if (!calc.isSameRoom) {
-        if (gap < neededTravel) {
-          impossibleMsg = `You can't get from ${priorLocLabel} to ${currentLocLabel} by ${formatTime12h(
-            startTime
-          )} — it's ${articleFor(neededTravel)} ${neededTravel} min walk and you have ${gap}.`;
-        } else if (gap < neededTravel + effectiveBuffer) {
-          tightMsg = `You can't comfortably get from ${priorLocLabel} to ${currentLocLabel} by ${formatTime12h(
-            startTime
-          )} — it's ${articleFor(
-            neededTravel
-          )} ${neededTravel} min walk (+${effectiveBuffer} min buffer) and you have ${gap}.`;
-        }
-      }
-    }
-
-    // 2. Check transition to next meeting
-    if (next && next.format !== 'online' && !next.isOnline) {
-      const nextStart = parseTimeToMinutes(next.startTime);
-      const gap = nextStart - endMin;
-      const calc = calculateBuildingToBuildingSeconds(
-        buildingCode,
-        floor,
-        next.buildingCode,
-        next.floor || 1,
-        settings,
-        roomNumber.trim(),
-        next.roomNumber
-      );
-      const neededTravel = calc.totalMinutes;
-      const effectiveBuffer = calc.bufferMinutes;
-      const nextLocLabel = `${next.buildingCode}${next.roomNumber ? ` ${next.roomNumber}` : ''}`;
-
-      if (!calc.isSameRoom) {
-        if (gap < neededTravel && !impossibleMsg) {
-          impossibleMsg = `You can't get from ${currentLocLabel} to ${nextLocLabel} by ${formatTime12h(
-            next.startTime
-          )} — it's ${articleFor(neededTravel)} ${neededTravel} min walk and you have ${gap}.`;
-        } else if (gap < neededTravel + effectiveBuffer && !impossibleMsg && !tightMsg) {
-          tightMsg = `You can't comfortably get from ${currentLocLabel} to ${nextLocLabel} by ${formatTime12h(
-            next.startTime
-          )} — it's ${articleFor(
-            neededTravel
-          )} ${neededTravel} min walk (+${effectiveBuffer} min buffer) and you have ${gap}.`;
-        }
-      }
-    }
-
-    if (impossibleMsg) {
-      setTravelWarning(impossibleMsg);
-      setIsImpossible(true);
-      setWorkingSlots(computeWorkingSlots());
-      return;
-    }
-
-    if (tightMsg) {
-      setTravelWarning(tightMsg);
-      setIsImpossible(false);
-      setWorkingSlots(computeWorkingSlots());
-      return;
-    }
-
-    setTravelWarning(null);
-    setIsImpossible(false);
-    setWorkingSlots([]);
   }, [
     startTime,
     endTime,
@@ -418,6 +315,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
       source: meetingToEdit ? meetingToEdit.source : 'created',
       rawLocation: rawLoc,
       isOnline: format === 'online',
+      isUnparseableLocation: false,
     };
 
     onSaveMeeting(updated);

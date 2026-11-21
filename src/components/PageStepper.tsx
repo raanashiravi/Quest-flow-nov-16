@@ -98,7 +98,7 @@ export const PageStepper: React.FC<PageStepperProps> = ({
                   QuestFlow
                 </span>
                 <span className="text-[10px] sm:text-[11px] text-[var(--text-muted)] font-medium leading-tight mt-0.5 whitespace-nowrap">
-                  Room-to-room scheduling
+                  Schedule with walking time
                 </span>
               </div>
             </button>

@@ -39,6 +39,10 @@ import {
   parseTimeToMinutes,
   formatMinutesToTime,
   formatTime12h,
+  formatBuildingRoomLabel,
+  isMeetingLocationUnknown,
+  isMeetingOnline,
+  needsCampusTravel,
 } from '../../utils/travelCalculator';
 import { UW_BUILDINGS } from '../../data/uwaterlooCampus';
 import { findAvailableSlots, SuggestedSlot } from '../../utils/slotFinder';
@@ -115,12 +119,12 @@ function layoutOverlappingMeetings(list: CampusMeeting[]): PositionedMeeting[] {
     .map((meeting) => {
       const startMin = parseTimeToMinutes(meeting.startTime);
       const rawEnd = parseTimeToMinutes(meeting.endTime);
-      const endMin = Math.max(startMin + 15, rawEnd);
+      const endMin = Math.max(startMin + 1, rawEnd);
       return { meeting, startMin, endMin };
     })
     .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 
-  // Group into overlap clusters
+  // Group into overlap clusters (meetings that only touch at startMin === maxEnd do not share a cluster)
   const clusters: { items: typeof sorted; maxEnd: number }[] = [];
   for (const item of sorted) {
     const lastCluster = clusters[clusters.length - 1];
@@ -176,6 +180,9 @@ interface CalendarReviewPageProps {
   onBackToConnect: () => void;
   settings: CampusSettings;
   onUpdateOffice?: (office: UserOffice | null) => void;
+  activeSource?: 'tutorial' | 'google' | 'file' | null;
+  googleEmail?: string | null;
+  onExitTutorial?: () => void;
 }
 
 export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
@@ -191,6 +198,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   onBackToConnect,
   settings,
   onUpdateOffice,
+  activeSource,
+  googleEmail,
+  onExitTutorial,
 }) => {
   const [filterFormat, setFilterFormat] = useState<'all' | 'in_person' | 'online' | 'hybrid'>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -327,18 +337,24 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     [meetings, selectedDate]
   );
 
-  // Compute travel legs between consecutive physical/hybrid meetings across the full day
+  // Compute travel legs between physical/hybrid meetings across the full day
+  // (when an online meeting sits between two in-person meetings, the walk is measured
+  // from the earlier in-person building but can only start after the online meeting ends)
   const travelLegs = useMemo(() => {
     const legs: { [nextMeetingId: string]: TravelLeg } = {};
+    let lastPhysical: CampusMeeting | null = null;
+
     for (let i = 0; i < dayMeetings.length - 1; i++) {
       const current = dayMeetings[i];
+      if (isMeetingLocationUnknown(current)) {
+        lastPhysical = null;
+      } else if (needsCampusTravel(current)) {
+        lastPhysical = current;
+      }
+
       const next = dayMeetings[i + 1];
-
-      const currentNeedsTravel = current.format !== 'online' && !current.isOnline;
-      const nextNeedsTravel = next.format !== 'online' && !next.isOnline;
-
-      if (currentNeedsTravel && nextNeedsTravel && current.buildingCode && next.buildingCode) {
-        legs[next.id] = calculateTravelLeg(current, next, settings);
+      if (lastPhysical && needsCampusTravel(next)) {
+        legs[next.id] = calculateTravelLeg(lastPhysical, next, settings, current.endTime);
       }
     }
     return legs;
@@ -446,8 +462,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
     for (const m of dayMeetings) {
       map[m.id] = getDepartureForMeeting(m, lastPhysicalMeeting, settings);
-      const isOnline = m.format === 'online' || m.isOnline;
-      if (!isOnline && m.buildingCode && m.buildingCode !== 'ONLINE') {
+      if (isMeetingLocationUnknown(m)) {
+        lastPhysicalMeeting = null;
+      } else if (needsCampusTravel(m)) {
         lastPhysicalMeeting = m;
       }
     }
@@ -456,10 +473,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
   // First in-person meeting of the day & walk from office (when office is set)
   const firstInPersonMeeting = useMemo(
-    () =>
-      dayMeetings.find(
-        (m) => m.format !== 'online' && !m.isOnline && Boolean(m.buildingCode)
-      ) || null,
+    () => dayMeetings.find((m) => needsCampusTravel(m)) || null,
     [dayMeetings]
   );
 
@@ -543,47 +557,93 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     const earliestStart = Math.min(...positioned.map((p) => p.startMin));
     const latestEnd = Math.max(...positioned.map((p) => p.endMin));
 
-    const includeNowInGrid =
-      isToday &&
-      currentMinutes >= earliestStart - 120 &&
-      currentMinutes <= latestEnd + 60;
-
-    const hasOfficeFirstInUpcoming = Boolean(
-      officeFirstWalk &&
-        upcomingMeetings.some((m) => m.id === officeFirstWalk.meetingId)
-    );
-    const officeRowTopMin =
-      hasOfficeFirstInUpcoming && officeFirstWalk
-        ? officeFirstWalk.startMin - Math.max(18, officeFirstWalk.walkMinutes + officeFirstWalk.bufferMinutes)
-        : earliestStart;
-
-    const minMinute = Math.min(
-      includeNowInGrid ? Math.min(earliestStart, currentMinutes) : earliestStart,
-      officeRowTopMin
-    );
-    const maxMinute = includeNowInGrid
-      ? Math.max(latestEnd, currentMinutes + 20)
-      : latestEnd;
-
-    const startHour = Math.max(0, Math.floor(minMinute / 60));
-    const endHour = Math.min(24, Math.max(startHour + 2, Math.ceil(maxMinute / 60)));
-
-    const gridStartMin = startHour * 60;
-    const gridEndMin = endHour * 60;
-
-    const hours: number[] = [];
-    for (let h = startHour; h <= endHour; h++) {
-      hours.push(h);
-    }
-
-    // Build proportional travel blocks in gaps between consecutive upcoming meetings
+    // Build proportional travel blocks in gaps between consecutive upcoming meetings,
+    // plus any remaining office trip after a passed meeting leading into the first upcoming meeting.
     const gapLegs: {
       leg: TravelLeg;
       topMin: number;
       gapMin: number;
       isOfficeTrip: boolean;
       minVisualHeightPx: number;
+      showWalkToOffice?: boolean;
+      showAtOffice?: boolean;
+      showWalkFromOffice?: boolean;
+      atOfficeStartTime12h?: string;
     }[] = [];
+
+    const addOfficeTripLeg = (nxt: CampusMeeting, curEndMin: number) => {
+      const leg = travelLegs[nxt.id];
+      const nxtDep = departureByMeetingId[nxt.id];
+      if (!leg || !nxtDep || !nxtDep.isOfficeReturnBetweenMeetings || !settings.office?.buildingCode) {
+        return false;
+      }
+
+      const nxtStart = parseTimeToMinutes(nxt.startTime);
+      if (nxtStart - curEndMin < 0) return false;
+      if (isToday && currentMinutes >= nxtStart) return false;
+
+      const officeArrivalMin = nxtDep.officeArrivalMinutes;
+      const leaveByMin = nxtDep.leaveByMinutes;
+
+      const showWalkToOffice = !isToday || currentMinutes < officeArrivalMin;
+      const showAtOffice = !isToday || currentMinutes < leaveByMin;
+      const showWalkFromOffice = !isToday || currentMinutes < nxtStart;
+
+      if (!showWalkToOffice && !showAtOffice && !showWalkFromOffice) {
+        return false;
+      }
+
+      const effectiveTopMin = showWalkToOffice
+        ? isToday
+          ? Math.max(curEndMin, currentMinutes)
+          : curEndMin
+        : showAtOffice
+        ? isToday
+          ? Math.max(officeArrivalMin, currentMinutes)
+          : officeArrivalMin
+        : isToday
+        ? Math.max(leaveByMin, currentMinutes)
+        : leaveByMin;
+
+      const effectiveAtOfficeStartMin = isToday
+        ? Math.max(currentMinutes, officeArrivalMin)
+        : officeArrivalMin;
+      const atOfficeStartTime12h =
+        isToday && currentMinutes > officeArrivalMin
+          ? formatTime12h(formatMinutesToTime(effectiveAtOfficeStartMin))
+          : nxtDep.officeArrivalTime12h;
+
+      const visibleParts =
+        (showWalkToOffice ? 1 : 0) +
+        (showAtOffice ? 1 : 0) +
+        (showWalkFromOffice ? 1 : 0);
+      const minVisualHeightPx =
+        visibleParts === 3 ? 96 : visibleParts === 2 ? 64 : 30;
+
+      gapLegs.push({
+        leg,
+        topMin: effectiveTopMin,
+        gapMin: Math.max(0, nxtStart - effectiveTopMin),
+        isOfficeTrip: true,
+        minVisualHeightPx,
+        showWalkToOffice,
+        showAtOffice,
+        showWalkFromOffice,
+        atOfficeStartTime12h,
+      });
+      return true;
+    };
+
+    // If the earlier meeting has already ended (in passedMeetings) but an office trip
+    // before the first upcoming meeting is still in progress or ahead, include the remaining part
+    if (passedMeetings.length > 0 && upcomingMeetings.length > 0) {
+      const firstUpcoming = upcomingMeetings[0];
+      const incomingLeg = travelLegs[firstUpcoming.id];
+      if (incomingLeg) {
+        const earlierEndMin = parseTimeToMinutes(incomingLeg.fromMeeting.endTime);
+        addOfficeTripLeg(firstUpcoming, earlierEndMin);
+      }
+    }
 
     for (let i = 0; i < upcomingMeetings.length - 1; i++) {
       const cur = upcomingMeetings[i];
@@ -602,37 +662,106 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       const isOfficeTrip = Boolean(
         nxtDep?.isOfficeReturnBetweenMeetings && settings.office?.buildingCode
       );
-      if (leg.isSameBuilding && !isOfficeTrip) continue;
+      if (isOfficeTrip) {
+        addOfficeTripLeg(nxt, curEnd);
+        continue;
+      }
 
-      const minVisualHeightPx = isOfficeTrip ? 96 : 30;
+      const isShortLateGap =
+        (leg.status === 'IMPOSSIBLE' || leg.status === 'LATE') &&
+        gapMin >= 0 &&
+        gapMin < 5;
+
+      if (leg.isSameBuilding && !isShortLateGap) continue;
+
       gapLegs.push({
         leg,
         topMin: curEnd,
         gapMin,
-        isOfficeTrip,
-        minVisualHeightPx,
+        isOfficeTrip: false,
+        minVisualHeightPx: 30,
       });
     }
 
+    const includeNowInGrid =
+      isToday &&
+      currentMinutes >= earliestStart - 120 &&
+      currentMinutes <= latestEnd + 60;
+
+    const hasOfficeFirstInUpcoming = Boolean(
+      officeFirstWalk &&
+        upcomingMeetings.some((m) => m.id === officeFirstWalk.meetingId)
+    );
+    const officeRowTopMin =
+      hasOfficeFirstInUpcoming && officeFirstWalk
+        ? officeFirstWalk.startMin - Math.max(18, officeFirstWalk.walkMinutes + officeFirstWalk.bufferMinutes)
+        : earliestStart;
+
+    const earliestGapTopMin =
+      gapLegs.length > 0
+        ? Math.min(...gapLegs.map((g) => g.topMin))
+        : earliestStart;
+
+    const minMinute = Math.min(
+      includeNowInGrid ? Math.min(earliestStart, currentMinutes) : earliestStart,
+      officeRowTopMin,
+      earliestGapTopMin
+    );
+    const maxMinute = includeNowInGrid
+      ? Math.max(latestEnd, currentMinutes + 20)
+      : latestEnd;
+
+    const startHour = Math.max(0, Math.floor(minMinute / 60));
+    const endHour = Math.min(24, Math.max(startHour + 2, Math.ceil(maxMinute / 60)));
+
+    const gridStartMin = startHour * 60;
+    const gridEndMin = endHour * 60;
+
+    const hours: number[] = [];
+    for (let h = startHour; h <= endHour; h++) {
+      hours.push(h);
+    }
+
+    // Group positioned cards by overlap cluster so side-by-side short cards don't double-push vertically,
+    // while stacked short cards shift the next card down just enough so neither is hidden.
+    const cardPaddingIntervals: { startMin: number; endMin: number; extraPx: number }[] = [];
+    for (const p of positioned) {
+      const naturalCardPx = (p.endMin - p.startMin) * PIXELS_PER_MIN;
+      const extraCardPx = Math.max(0, 54 - naturalCardPx);
+      if (extraCardPx <= 0) continue;
+      const last = cardPaddingIntervals[cardPaddingIntervals.length - 1];
+      if (last && p.startMin < last.endMin) {
+        last.endMin = Math.max(last.endMin, p.endMin);
+        last.extraPx = Math.max(last.extraPx, extraCardPx);
+      } else {
+        cardPaddingIntervals.push({
+          startMin: p.startMin,
+          endMin: p.endMin,
+          extraPx: extraCardPx,
+        });
+      }
+    }
+
     // Monotonic push-down offset so walk rows and meeting cards never overlap
-    const getOffsetAtMin = (min: number): number => {
+    const getOffsetAtMin = (min: number, includeZeroGapsAtMin = true): number => {
       let offset = 0;
-      for (const p of positioned) {
-        const naturalCardPx = (p.endMin - p.startMin) * PIXELS_PER_MIN;
-        const extraCardPx = Math.max(0, 54 - naturalCardPx);
-        if (extraCardPx > 0) {
-          if (min >= p.endMin) {
-            offset += extraCardPx;
-          } else if (min > p.startMin) {
-            offset += extraCardPx * ((min - p.startMin) / Math.max(1, p.endMin - p.startMin));
-          }
+      for (const c of cardPaddingIntervals) {
+        if (min >= c.endMin) {
+          offset += c.extraPx;
+        } else if (min > c.startMin) {
+          offset += c.extraPx * ((min - c.startMin) / Math.max(1, c.endMin - c.startMin));
         }
       }
       for (const g of gapLegs) {
         const naturalGapPx = Math.max(0, g.gapMin) * PIXELS_PER_MIN;
         const extraGapPx = Math.max(0, g.minVisualHeightPx - naturalGapPx);
-        if (extraGapPx > 0 && min > g.topMin) {
-          if (g.gapMin <= 0 || min >= g.topMin + g.gapMin) {
+        if (extraGapPx <= 0) continue;
+        if (g.gapMin <= 0) {
+          if (min > g.topMin || (includeZeroGapsAtMin && min === g.topMin)) {
+            offset += extraGapPx;
+          }
+        } else if (min > g.topMin) {
+          if (min >= g.topMin + g.gapMin) {
             offset += extraGapPx;
           } else {
             offset += extraGapPx * ((min - g.topMin) / g.gapMin);
@@ -642,11 +771,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       return offset;
     };
 
-    const getTopPxForMin = (min: number): number =>
-      (min - gridStartMin) * PIXELS_PER_MIN + 12 + getOffsetAtMin(min);
+    const getTopPxForMin = (min: number, includeZeroGapsAtMin = true): number =>
+      (min - gridStartMin) * PIXELS_PER_MIN + 12 + getOffsetAtMin(min, includeZeroGapsAtMin);
 
     const totalHeight =
-      (gridEndMin - gridStartMin) * PIXELS_PER_MIN + getOffsetAtMin(gridEndMin);
+      (gridEndMin - gridStartMin) * PIXELS_PER_MIN + getOffsetAtMin(gridEndMin, true);
 
     return {
       positioned,
@@ -660,14 +789,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       hasOfficeFirstInUpcoming,
       getTopPxForMin,
     };
-  }, [upcomingMeetings, isToday, currentMinutes, travelLegs, officeFirstWalk, departureByMeetingId, settings.office]);
+  }, [passedMeetings, upcomingMeetings, isToday, currentMinutes, travelLegs, officeFirstWalk, departureByMeetingId, settings.office]);
 
   const writtenDate = formatWrittenDate(selectedDate);
 
   // Compact block renderer for Passed Meetings inside the collapsible dropdown
   const renderPassedBlock = (meeting: CampusMeeting) => {
     const format = meeting.format || (meeting.isOnline ? 'online' : 'in_person');
-    const isOnline = format === 'online' || meeting.isOnline;
+    const isOnline = isMeetingOnline(meeting);
+    const isLocationUnknown = isMeetingLocationUnknown(meeting);
     const incomingLeg = travelLegs[meeting.id];
     const targetProblem = isToday ? undefined : problemByTargetId[meeting.id];
     const isResolved = Boolean(resolvedByMeetingId[meeting.id]);
@@ -679,9 +809,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
         incomingLeg && (incomingLeg.status === 'IMPOSSIBLE' || incomingLeg.status === 'LATE')
       );
 
-    const mapsUrl = !isOnline
-      ? getGoogleMapsBuildingUrl(meeting.buildingCode)
-      : '';
+    const mapsUrl =
+      !isOnline && !isLocationUnknown
+        ? getGoogleMapsBuildingUrl(meeting.buildingCode)
+        : '';
 
     const showOfficeWalkRow =
       officeFirstWalk && officeFirstWalk.meetingId === meeting.id;
@@ -771,7 +902,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               )}
             </div>
             <p className={`text-[11px] flex items-center gap-1 ${format === 'online' ? 'text-[var(--text-muted)]' : 'text-[var(--sky-strong)]'}`}>
-              {!isOnline && meeting.buildingCode ? (
+              {isOnline ? (
+                <>
+                  <Video className="w-3 h-3 text-[var(--sky)] shrink-0" />
+                  <span>Teams</span>
+                </>
+              ) : isLocationUnknown ? (
+                <>
+                  <MapPin className="w-3 h-3 text-[var(--status-tight-fg)] shrink-0" />
+                  <span className="text-[var(--status-tight-fg)] font-semibold">Set location</span>
+                </>
+              ) : (
                 <>
                   <MapPin className="w-3 h-3 text-[var(--sky)] shrink-0" />
                   <span>
@@ -780,18 +921,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     {format === 'hybrid' ? ' / Teams' : ''}
                   </span>
                 </>
-              ) : (
-                <>
-                  <Video className="w-3 h-3 text-[var(--sky)] shrink-0" />
-                  <span>Teams</span>
-                </>
               )}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1 self-end sm:self-center shrink-0">
-          {!isOnline && meeting.buildingCode && meeting.buildingCode !== 'ONLINE' && (
+          {!isOnline && !isLocationUnknown && (
             <a
               href={mapsUrl}
               target="_blank"
@@ -862,52 +998,81 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6 animate-in fade-in duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 pb-3 border-b border-[var(--border)]">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
-            Your Calendar
-          </h1>
-          {isToday ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] text-white text-xs font-bold tabular-nums">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span>{currentTimeLabel}</span>
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onSelectDate(todayStr)}
-              className="px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-xs font-semibold text-white transition-colors cursor-pointer"
-            >
-              Jump to Today
-            </button>
-          )}
-
-          {dayMeetings.length > 0 && (
-            impossibleLegs.length > 0 ? (
-              <button
-                type="button"
-                onClick={handleScrollToFirstProblem}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--status-late-bg)] hover:opacity-90 border border-[var(--status-late-fg)]/30 text-xs font-bold text-[var(--status-late-fg)] transition-colors cursor-pointer"
-              >
-                <AlertTriangle className="w-3.5 h-3.5 text-[var(--status-late-fg)] shrink-0" />
-                <span>
-                  {impossibleLegs.length} back-to-back{impossibleLegs.length === 1 ? '' : 's'} you can&apos;t make
-                </span>
-              </button>
+      <div className="space-y-2 pb-3 border-b border-[var(--border)]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
+              Your Calendar
+            </h1>
+            {isToday ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] text-white text-xs font-bold tabular-nums">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>{currentTimeLabel}</span>
+              </span>
             ) : (
               <button
                 type="button"
-                onClick={problemLegs.length > 0 ? handleScrollToFirstProblem : undefined}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--status-ok-bg)] border border-[var(--status-ok-fg)]/30 text-xs font-bold text-[var(--status-ok-fg)] transition-colors ${
-                  problemLegs.length > 0 ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
-                }`}
+                onClick={() => onSelectDate(todayStr)}
+                className="px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-xs font-semibold text-white transition-colors cursor-pointer"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-ok-fg)] shrink-0" />
-                <span>All meetings reachable</span>
+                Jump to Today
               </button>
-            )
-          )}
+            )}
+
+            {dayMeetings.length > 0 && (
+              impossibleLegs.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleScrollToFirstProblem}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--status-late-bg)] hover:opacity-90 border border-[var(--status-late-fg)]/30 text-xs font-bold text-[var(--status-late-fg)] transition-colors cursor-pointer"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-[var(--status-late-fg)] shrink-0" />
+                  <span>
+                    {impossibleLegs.length} back-to-back{impossibleLegs.length === 1 ? '' : 's'} you can&apos;t make
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={problemLegs.length > 0 ? handleScrollToFirstProblem : undefined}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--status-ok-bg)] border border-[var(--status-ok-fg)]/30 text-xs font-bold text-[var(--status-ok-fg)] transition-colors ${
+                    problemLegs.length > 0 ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-ok-fg)] shrink-0" />
+                  <span>All meetings reachable</span>
+                </button>
+              )
+            )}
+          </div>
         </div>
+
+        {activeSource && (
+          <div>
+            {activeSource === 'tutorial' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)]">
+                <span>Tutorial ·</span>
+                <button
+                  type="button"
+                  onClick={onExitTutorial}
+                  className="font-bold text-[var(--sky-strong)] hover:underline cursor-pointer focus-visible:outline-none"
+                >
+                  Exit tutorial
+                </button>
+              </span>
+            ) : activeSource === 'google' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)]">
+                <span>
+                  Google Calendar{googleEmail ? ` · ${googleEmail}` : ''}
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)]">
+                <span>Imported file</span>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Fixed Confirmation Notice */}
@@ -1295,95 +1460,147 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   })()}
 
                 {/* Travel / Walk Gap Blocks */}
-                {timelineLayout.gapLegs.map(({ leg, topMin, gapMin, isOfficeTrip }) => {
-                  const slotTopPx = timelineLayout.getTopPxForMin(topMin);
-                  const slotBottomPx = timelineLayout.getTopPxForMin(topMin + gapMin);
-                  const slotSpanPx = Math.max(28, slotBottomPx - slotTopPx);
+                {timelineLayout.gapLegs.map(
+                  ({
+                    leg,
+                    topMin,
+                    gapMin,
+                    isOfficeTrip,
+                    minVisualHeightPx,
+                    showWalkToOffice = true,
+                    showAtOffice = true,
+                    showWalkFromOffice = true,
+                    atOfficeStartTime12h,
+                  }) => {
+                    const slotTopPx = timelineLayout.getTopPxForMin(topMin, false);
+                    const slotBottomPx = timelineLayout.getTopPxForMin(topMin + gapMin, true);
+                    const slotSpanPx = Math.max(28, slotBottomPx - slotTopPx);
 
-                  const nxtDep = departureByMeetingId[leg.toMeeting.id];
-                  if (isOfficeTrip && nxtDep && settings.office?.buildingCode) {
-                    const officeCode = settings.office.buildingCode;
-                    const topPx = slotTopPx + 1;
-                    const heightPx = Math.max(92, slotSpanPx - 4);
-                    return (
-                      <div
-                        key={leg.id}
-                        className="absolute left-2.5 right-2.5 flex flex-col justify-between gap-1 z-10"
-                        style={{ top: `${topPx}px`, height: `${heightPx}px` }}
-                      >
-                        {/* 1. Walk to Office */}
-                        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                    const nxtDep = departureByMeetingId[leg.toMeeting.id];
+                    if (isOfficeTrip && nxtDep && settings.office?.buildingCode) {
+                      const officeCode = settings.office.buildingCode;
+                      const topPx = slotTopPx + 1;
+                      const heightPx = Math.max(minVisualHeightPx - 4, slotSpanPx - 4);
+                      const startLabel = atOfficeStartTime12h || nxtDep.officeArrivalTime12h;
+                      return (
+                        <div
+                          key={leg.id}
+                          className="absolute left-2.5 right-2.5 flex flex-col justify-between gap-1 z-10"
+                          style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                        >
+                          {/* 1. Walk to Office (hidden once already at office) */}
+                          {showWalkToOffice && (
+                            <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
+                                <span className="font-bold truncate">
+                                  {leg.fromMeeting.buildingCode} → Office {officeCode} · {nxtDep.toOfficeWalkMinutes}m walk
+                                </span>
+                              </div>
+                              <a
+                                href={getGoogleMapsDirectionsUrl(
+                                  leg.fromMeeting.buildingCode,
+                                  officeCode,
+                                  'walking'
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                                title="Open walking directions to office in Google Maps"
+                              >
+                                <Navigation className="w-2.5 h-2.5" />
+                                <span>Route</span>
+                                <ExternalLink className="w-2 h-2 opacity-75" />
+                              </a>
+                            </div>
+                          )}
+
+                          {/* 2. At Your Office Block (--bg-hover) */}
+                          {showAtOffice && (
+                            <div className="flex-1 min-h-[24px] rounded-lg border border-[var(--border)] bg-[var(--bg-hover)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px]">
+                              <span className="font-bold truncate">
+                                🏢 At your office · {startLabel} – {nxtDep.leaveByTime12h}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* 3. Walk from Office to Next Meeting */}
+                          {showWalkFromOffice && (
+                            <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
+                                <span className="font-bold truncate">
+                                  Office {officeCode} → {leg.toMeeting.buildingCode} · {nxtDep.walkMinutes}m walk · leave by {nxtDep.leaveByTime12h}
+                                </span>
+                              </div>
+                              <a
+                                href={getGoogleMapsDirectionsUrl(
+                                  officeCode,
+                                  leg.toMeeting.buildingCode,
+                                  'walking'
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                                title="Open walking directions from office in Google Maps"
+                              >
+                                <Navigation className="w-2.5 h-2.5" />
+                                <span>Route</span>
+                                <ExternalLink className="w-2 h-2 opacity-75" />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    const isCompactGap = gapMin < 18;
+                    const topPx = slotTopPx + (isCompactGap ? 1 : 2);
+                    const heightPx = Math.max(isCompactGap ? 26 : 30, slotSpanPx - 4);
+                    const isStillAhead =
+                      !isToday || parseTimeToMinutes(leg.toMeeting.startTime) > currentMinutes;
+                    const isLate =
+                      isStillAhead && (leg.status === 'IMPOSSIBLE' || leg.status === 'LATE');
+                    const isTight = isStillAhead && leg.status === 'TIGHT';
+                    const isResolved =
+                      !isLate &&
+                      !isTight &&
+                      (Boolean(resolvedByMeetingId[leg.toMeeting.id]) ||
+                        Boolean(resolvedByMeetingId[leg.fromMeeting.id]));
+                    const isShortLateGap = isLate && gapMin >= 0 && gapMin < 5;
+
+                    if (isShortLateGap) {
+                      return (
+                        <div
+                          key={leg.id}
+                          className="absolute left-2.5 right-2.5 rounded-lg border border-[var(--status-late-fg)]/40 bg-[var(--status-late-bg)] text-[var(--status-late-fg)] px-2.5 flex items-center justify-between gap-2 z-10 text-[11px] leading-none"
+                          style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                        >
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
+                            <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--status-late-fg)]" />
                             <span className="font-bold truncate">
-                              {leg.fromMeeting.buildingCode} → Office {officeCode} · {nxtDep.toOfficeWalkMinutes}m walk
+                              {leg.fromMeeting.buildingCode} → {leg.toMeeting.buildingCode} ·{' '}
+                              {leg.questFlowTravelMinutes}m walk · you have {leg.gapMinutes}
                             </span>
                           </div>
                           <a
                             href={getGoogleMapsDirectionsUrl(
                               leg.fromMeeting.buildingCode,
-                              officeCode,
-                              'walking'
-                            )}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
-                            title="Open walking directions to office in Google Maps"
-                          >
-                            <Navigation className="w-2.5 h-2.5" />
-                            <span>Route</span>
-                            <ExternalLink className="w-2 h-2 opacity-75" />
-                          </a>
-                        </div>
-
-                        {/* 2. At Your Office Block (--bg-hover) */}
-                        <div className="flex-1 min-h-[24px] rounded-lg border border-[var(--border)] bg-[var(--bg-hover)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px]">
-                          <span className="font-bold truncate">
-                            🏢 At your office · {nxtDep.officeArrivalTime12h} – {nxtDep.leaveByTime12h}
-                          </span>
-                        </div>
-
-                        {/* 3. Walk from Office to Next Meeting */}
-                        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
-                            <span className="font-bold truncate">
-                              Office {officeCode} → {leg.toMeeting.buildingCode} · {nxtDep.walkMinutes}m walk · leave by {nxtDep.leaveByTime12h}
-                            </span>
-                          </div>
-                          <a
-                            href={getGoogleMapsDirectionsUrl(
-                              officeCode,
                               leg.toMeeting.buildingCode,
                               'walking'
                             )}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
-                            title="Open walking directions from office in Google Maps"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-card)] border border-[var(--status-late-fg)]/30 text-[var(--status-late-fg)] hover:bg-[var(--status-late-fg)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                            title="Open walking directions in Google Maps"
                           >
                             <Navigation className="w-2.5 h-2.5" />
                             <span>Route</span>
                             <ExternalLink className="w-2 h-2 opacity-75" />
                           </a>
                         </div>
-                      </div>
-                    );
-                  }
-
-                  const isCompactGap = gapMin < 18;
-                  const topPx = slotTopPx + (isCompactGap ? 1 : 2);
-                  const heightPx = Math.max(isCompactGap ? 26 : 30, slotSpanPx - 4);
-                  const isStillAhead =
-                    !isToday || parseTimeToMinutes(leg.toMeeting.startTime) > currentMinutes;
-                  const isLate =
-                    isStillAhead && (leg.status === 'IMPOSSIBLE' || leg.status === 'LATE');
-                  const isTight = isStillAhead && leg.status === 'TIGHT';
-                  const isResolved =
-                    !isLate &&
-                    !isTight &&
-                    (Boolean(resolvedByMeetingId[leg.toMeeting.id]) ||
-                      Boolean(resolvedByMeetingId[leg.fromMeeting.id]));
+                      );
+                    }
 
                   if (isCompactGap) {
                     return (
@@ -1518,10 +1735,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 {/* Positioned Meeting Time Blocks */}
                 {timelineLayout.positioned.map(({ meeting, startMin, endMin, col, totalCols }) => {
                   const format = meeting.format || (meeting.isOnline ? 'online' : 'in_person');
-                  const isOnline = format === 'online' || meeting.isOnline;
+                  const isOnline = isMeetingOnline(meeting);
+                  const isLocationUnknown = isMeetingLocationUnknown(meeting);
                   const durationMin = endMin - startMin;
-                  const topPx = timelineLayout.getTopPxForMin(startMin);
-                  const bottomPx = timelineLayout.getTopPxForMin(endMin);
+                  const topPx = timelineLayout.getTopPxForMin(startMin, true);
+                  const bottomPx = timelineLayout.getTopPxForMin(endMin, false);
                   const heightPx = Math.max(52, bottomPx - topPx - 2);
                   const isCompact = heightPx < 76;
 
@@ -1534,9 +1752,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   const isInlineResolved =
                     !targetProblem && Boolean(resolvedByMeetingId[meeting.id]);
 
-                  const mapsUrl = !isOnline
-                    ? getGoogleMapsBuildingUrl(meeting.buildingCode)
-                    : '';
+                  const mapsUrl =
+                    !isOnline && !isLocationUnknown
+                      ? getGoogleMapsBuildingUrl(meeting.buildingCode)
+                      : '';
 
                   const widthPct = 100 / totalCols;
                   const leftPct = col * widthPct;
@@ -1546,6 +1765,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
                   const locCompact = isOnline
                     ? 'Teams'
+                    : isLocationUnknown
+                    ? 'Set location'
                     : `${meeting.buildingCode}${meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}`;
 
                   return (
@@ -1650,9 +1871,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
                             {isMenuOpen && (
                               <div className="absolute right-0 top-7 w-40 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] shadow-xl py-1 z-40 text-xs font-semibold">
-                                {!isOnline &&
-                                  meeting.buildingCode &&
-                                  meeting.buildingCode !== 'ONLINE' && (
+                                {!isOnline && !isLocationUnknown && (
                                     <a
                                       href={mapsUrl}
                                       target="_blank"
@@ -1764,7 +1983,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             </div>
 
                             <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] font-semibold ${format === 'online' ? 'text-[var(--text-secondary)]' : 'text-[var(--sky-strong)]'}`}>
-                              {!isOnline && meeting.buildingCode ? (
+                              {isOnline ? (
+                                <span className="inline-flex items-center gap-1 text-[var(--text-secondary)]">
+                                  <Video className="w-3 h-3 text-[var(--sky)] shrink-0" />
+                                  <span>Teams</span>
+                                </span>
+                              ) : isLocationUnknown ? (
+                                <span className="inline-flex items-center gap-1 text-[var(--status-tight-fg)]">
+                                  <MapPin className="w-3 h-3 shrink-0" />
+                                  <span>Set location</span>
+                                </span>
+                              ) : (
                                 <span className="inline-flex items-center gap-1">
                                   <MapPin className="w-3 h-3 text-[var(--sky)] shrink-0" />
                                   <span>
@@ -1772,11 +2001,6 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                     {meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}
                                     {format === 'hybrid' ? ' / Teams' : ''}
                                   </span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[var(--text-secondary)]">
-                                  <Video className="w-3 h-3 text-[var(--sky)] shrink-0" />
-                                  <span>Teams</span>
                                 </span>
                               )}
                               <span className={format === 'online' ? 'text-[var(--text-muted)]' : 'text-[var(--sky-strong)]'}>·</span>
@@ -1792,9 +2016,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             className="flex items-center gap-1 shrink-0"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {!isOnline &&
-                              meeting.buildingCode &&
-                              meeting.buildingCode !== 'ONLINE' && (
+                            {!isOnline && !isLocationUnknown && (
                                 <a
                                   href={mapsUrl}
                                   target="_blank"
@@ -1939,10 +2161,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       {/* Fix Transition Sheet (Bottom sheet on phone, centered dialog on desktop) */}
       {activeFixProblem && (() => {
         const { earlier, later, leg, isOverlap, targetMeeting, otherMeeting } = activeFixProblem;
-        const fromLoc = `${earlier.buildingCode}${earlier.roomNumber ? ` ${earlier.roomNumber}` : ''}`;
-        const toLoc = `${later.buildingCode}${later.roomNumber ? ` ${later.roomNumber}` : ''}`;
-        const targetLoc = `${targetMeeting.buildingCode}${targetMeeting.roomNumber ? ` ${targetMeeting.roomNumber}` : ''}`;
-        const otherLoc = `${otherMeeting.buildingCode}${otherMeeting.roomNumber ? ` ${otherMeeting.roomNumber}` : ''}`;
+        const fromLoc =
+          formatBuildingRoomLabel(earlier.buildingCode, earlier.roomNumber) || earlier.title;
+        const toLoc =
+          formatBuildingRoomLabel(later.buildingCode, later.roomNumber) || later.title;
+        const targetLoc =
+          formatBuildingRoomLabel(targetMeeting.buildingCode, targetMeeting.roomNumber) ||
+          targetMeeting.title;
+        const otherLoc =
+          formatBuildingRoomLabel(otherMeeting.buildingCode, otherMeeting.roomNumber) ||
+          otherMeeting.title;
 
         const targetIsUser =
           targetMeeting.source === 'created' || targetMeeting.source === 'new';
@@ -1963,9 +2191,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           durationMinutes: targetDuration,
         };
 
+        const departAfterMin = parseTimeToMinutes(later.startTime) - leg.gapMinutes;
         const baseMinNeeded = isOverlap
           ? parseTimeToMinutes(otherMeeting.endTime)
-          : parseTimeToMinutes(earlier.endTime) +
+          : departAfterMin +
             leg.questFlowTravelMinutes +
             (settings.arrivalBufferMinutes ?? 5);
         const preferredQuarter = formatMinutesToTime(Math.ceil(baseMinNeeded / 15) * 15);
