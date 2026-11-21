@@ -90,6 +90,9 @@ export default function App() {
         if (parsed?.office && Number(parsed.office.returnMinGapMinutes) === 30) {
           parsed.office.returnMinGapMinutes = 45;
         }
+        if (parsed?.notifications) {
+          parsed.notifications.soundAlert = false;
+        }
         return parsed;
       }
     } catch {}

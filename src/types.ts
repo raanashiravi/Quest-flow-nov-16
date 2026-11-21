@@ -128,7 +128,7 @@ export const DEFAULT_CAMPUS_SETTINGS: CampusSettings = {
   notifications: {
     enabled: true,
     leadTimeMinutes: 5,
-    soundAlert: true,
+    soundAlert: false,
   },
   office: null,
 };

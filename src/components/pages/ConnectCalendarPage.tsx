@@ -2,22 +2,18 @@ import React, { useState, useRef } from 'react';
 import {
   CampusMeeting,
 } from '../../types';
-import { getSampleDayMeetings } from '../../data/sampleDay';
-import { formatTime12h } from '../../utils/travelCalculator';
 import { parseIcsContents } from '../../utils/icsParser';
 import { parseLocationString } from '../../utils/locationParser';
 import {
   Calendar,
   Upload,
   Link as LinkIcon,
-  Sparkles,
   Check,
   ArrowRight,
   ArrowLeft,
   FileText,
   Loader2,
   AlertCircle,
-  Plus,
 } from 'lucide-react';
 
 interface ConnectCalendarPageProps {
@@ -35,8 +31,8 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   onContinue,
   onBack,
 }) => {
-  // Tabs: Outlook/Link (default), Upload ICS, Paste Text, or Sample Data
-  const [activeTab, setActiveTab] = useState<'outlook' | 'ics' | 'text' | 'sample'>('outlook');
+  // Tabs: Outlook/Link (default), Upload ICS, or Paste Text
+  const [activeTab, setActiveTab] = useState<'outlook' | 'ics' | 'text'>('outlook');
 
   // Outlook URL state
   const [outlookUrl, setOutlookUrl] = useState('');
@@ -55,18 +51,6 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
   const hasMeetings = currentMeetings && currentMeetings.length > 0;
-  const tutorialMeetings = getSampleDayMeetings(selectedDate);
-
-  // 1-Click Load Sample Data
-  const handleLoadSample = () => {
-    const sample = getSampleDayMeetings(selectedDate);
-    onSetMeetings(sample, true);
-    setErrorNotice(null);
-    setSuccessNotice(`Loaded 5 tutorial University of Waterloo meetings for ${selectedDate}.`);
-    setTimeout(() => {
-      onContinue();
-    }, 400);
-  };
 
   // Connect Outlook / WebCal Link (Fetches live ICS from server endpoint)
   const handleConnectOutlook = async (e: React.FormEvent) => {
@@ -218,7 +202,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
   // Guard: if user clicks Continue without inputting meetings, stop and show error
   const handleAttemptContinue = () => {
     if (!hasMeetings) {
-      setErrorNotice('No meetings have been inputted yet. Please connect an Outlook link, upload a .ics file, paste text, or try the tutorial to continue.');
+      setErrorNotice('No meetings have been inputted yet. Please connect an Outlook link, upload a .ics file, or paste text to continue.');
       return;
     }
     setErrorNotice(null);
@@ -307,22 +291,6 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
         >
           <FileText className="w-3.5 h-3.5" />
           <span>Paste Text</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('sample');
-            setErrorNotice(null);
-          }}
-          className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === 'sample'
-              ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
-              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-          }`}
-        >
-          <Sparkles className={`w-3.5 h-3.5 ${activeTab === 'sample' ? 'text-white' : 'text-[var(--sky)]'}`} />
-          <span>Try the tutorial</span>
         </button>
       </div>
 
@@ -442,44 +410,6 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           >
             {textParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
             <span>Parse & Add to Calendar</span>
-          </button>
-        </div>
-      )}
-
-      {/* Tab 4: Tutorial Option */}
-      {activeTab === 'sample' && (
-        <div className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-[var(--text-primary)]">
-              University of Waterloo Tutorial Schedule
-            </h2>
-            <p className="text-xs text-[var(--text-muted)] font-normal">
-              Preloads 5 realistic faculty meetings in MC, NH, DC, E7, and Teams to test room-to-room navigation.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1.5 font-normal">
-            <p className="font-semibold text-[var(--text-primary)]">Includes:</p>
-            {tutorialMeetings.map((m) => {
-              const locLabel =
-                m.format === 'online' || m.isOnline || m.buildingCode === 'ONLINE'
-                  ? 'Microsoft Teams'
-                  : `${m.buildingCode}${m.roomNumber ? ` ${m.roomNumber}` : ''}`;
-              return (
-                <p key={m.id}>
-                  • {formatTime12h(m.startTime)} – {formatTime12h(m.endTime)}: {m.title} ({locLabel})
-                </p>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleLoadSample}
-            className="px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-xs transition-colors flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Try the tutorial</span>
           </button>
         </div>
       )}

@@ -3,8 +3,6 @@ import {
   MapPin,
   Clock,
   Footprints,
-  Car,
-  Bus,
   Navigation,
   Calendar,
   ExternalLink,
@@ -16,14 +14,11 @@ import {
 import { CampusMeeting, CampusSettings } from '../../types';
 import {
   parseTimeToMinutes,
-  formatMinutesToTime,
   formatTime12h,
   getDepartureForMeeting,
 } from '../../utils/travelCalculator';
-import { UW_BUILDINGS, getOutdoorWalkEstimate } from '../../data/uwaterlooCampus';
+import { UW_BUILDINGS } from '../../data/uwaterlooCampus';
 import { getGoogleMapsDirectionsUrl } from '../../utils/googleMapsLinks';
-
-type TravelMode = 'walk' | 'drive' | 'transit';
 
 interface NextMeetingPageProps {
   meetings: CampusMeeting[];
@@ -48,7 +43,6 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
   isFromCalendar = true,
   onClose,
 }) => {
-  const [travelMode, setTravelMode] = useState<TravelMode>('walk');
   const [manualIndex, setManualIndex] = useState<number | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
 
@@ -216,16 +210,6 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
   ).padStart(2, '0')}`;
   const isToday = selectedDate === todayLocalStr;
 
-  const gmTravelMode =
-    travelMode === 'drive' ? 'driving' : travelMode === 'transit' ? 'transit' : 'walking';
-
-  const activeModeLabel =
-    travelMode === 'walk'
-      ? 'walk'
-      : travelMode === 'drive'
-      ? 'drive'
-      : 'transit';
-
   const renderMeetingCard = (targetMeeting: CampusMeeting, idx: number, isActiveCard: boolean) => {
     const previousPhysicalMeeting =
       idx > 0
@@ -249,46 +233,10 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
     const originLabel = departure.originLabel;
     const walkMinutes = departure.walkMinutes;
 
-    const outdoorEstimate =
-      originCode && destCode
-        ? getOutdoorWalkEstimate(originCode, destCode, settings.walkingSpeed)
-        : { minutes: 0, distanceMeters: 0 };
-    const sameBuilding = !isOnline && Boolean(originCode) && originCode === destCode;
-
-    const driveMinutes =
-      isOnline || !hasOrigin
-        ? 0
-        : sameBuilding
-        ? walkMinutes
-        : Math.max(4, Math.round(outdoorEstimate.minutes * 0.4) + 3);
-
-    const transitMinutes =
-      isOnline || !hasOrigin
-        ? 0
-        : sameBuilding
-        ? walkMinutes
-        : Math.max(6, Math.round(outdoorEstimate.minutes * 0.6) + 4);
-
-    const activeModeMinutes =
-      travelMode === 'walk'
-        ? walkMinutes
-        : travelMode === 'drive'
-        ? driveMinutes
-        : transitMinutes;
-
-    const bufferMin = settings.arrivalBufferMinutes ?? 5;
     const leaveByTime12h =
-      !isOnline && hasOrigin
-        ? travelMode === 'walk'
-          ? departure.leaveByTime12h
-          : formatTime12h(
-              formatMinutesToTime(
-                parseTimeToMinutes(targetMeeting.startTime) - (activeModeMinutes + bufferMin)
-              )
-            )
-        : null;
+      !isOnline && hasOrigin ? departure.leaveByTime12h : null;
 
-    const googleMapsUrl = getGoogleMapsDirectionsUrl(originCode, destCode, gmTravelMode);
+    const googleMapsUrl = getGoogleMapsDirectionsUrl(originCode, destCode, 'walking');
 
     const startMin = parseTimeToMinutes(targetMeeting.startTime);
     const endMin = parseTimeToMinutes(targetMeeting.endTime);
@@ -363,9 +311,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
 
             <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-[var(--border)]">
               <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                {travelMode === 'walk' && <Footprints className="w-3.5 h-3.5 text-[var(--sky)]" />}
-                {travelMode === 'drive' && <Car className="w-3.5 h-3.5 text-[var(--sky)]" />}
-                {travelMode === 'transit' && <Bus className="w-3.5 h-3.5 text-[var(--sky)]" />}
+                <Footprints className="w-3.5 h-3.5 text-[var(--sky)]" />
                 <span>Estimated Travel</span>
               </div>
 
@@ -390,7 +336,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               ) : (
                 <>
                   <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tabular-nums">
-                    ~{activeModeMinutes} min {activeModeLabel}
+                    ~{walkMinutes} min walk
                   </p>
                   <p className="mt-1 text-xs font-medium text-[var(--text-secondary)] truncate">
                     From {originLabel} → {destCode}
@@ -400,47 +346,8 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
             </div>
           </div>
 
-          {/* 3. Mode Selector (Walk / Drive / Transit) or Remote Indicator */}
-          {!isOnline && hasOrigin ? (
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--bg-hover)] border border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setTravelMode('walk')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  travelMode === 'walk'
-                    ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <Footprints className="w-3.5 h-3.5" />
-                <span>Walk ({walkMinutes}m)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTravelMode('drive')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  travelMode === 'drive'
-                    ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <Car className="w-3.5 h-3.5" />
-                <span>Drive ({driveMinutes}m)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTravelMode('transit')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  travelMode === 'transit'
-                    ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <Bus className="w-3.5 h-3.5" />
-                <span>Transit ({transitMinutes}m)</span>
-              </button>
-            </div>
-          ) : isOnline ? (
+          {/* 3. Remote Indicator (when online) */}
+          {isOnline ? (
             <div className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)]">
               <Laptop className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
               <span>Virtual session · No campus travel needed</span>

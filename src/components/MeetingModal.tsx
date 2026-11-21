@@ -627,34 +627,6 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
             ))}
           </div>
 
-          {/* Organizer */}
-          <div>
-            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-              Organizer / Contact
-            </label>
-            <input
-              type="text"
-              value={organizer}
-              onChange={(e) => setOrganizer(e.target.value)}
-              placeholder="e.g. Prof. Sarah Chen"
-              className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
-            />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-              Agenda or Notes
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Brief agenda, AV requirements, or discussion points"
-              className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
-            />
-          </div>
-
           {/* Live Travel Conflict Warning */}
           {travelWarning && (
             <div
