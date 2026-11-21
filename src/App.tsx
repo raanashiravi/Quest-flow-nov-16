@@ -261,19 +261,19 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FBFBFA] dark:bg-[#121212] text-neutral-900 dark:text-neutral-100 font-sans selection:bg-blue-600 selection:text-white flex flex-col">
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-primary)] font-sans selection:bg-[var(--sky-strong)] selection:text-white flex flex-col">
       {/* Real-time departure reminder banner */}
       {activeDepartureAlert && (
-        <div className="sticky top-0 z-50 bg-neutral-900 text-white px-4 py-3 shadow-md border-b border-neutral-800 flex items-center justify-between gap-4">
+        <div className="sticky top-0 z-50 bg-[var(--bg-card)] text-[var(--text-primary)] px-4 py-3 shadow-md border-b border-[var(--border)] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-[var(--sky-strong)] flex items-center justify-center shrink-0">
               <Bell className="w-4 h-4 text-white animate-bounce" />
             </div>
             <div>
-              <p className="text-xs sm:text-sm font-bold text-white">
+              <p className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
                 Time to Depart for {activeDepartureAlert.meetingTitle}!
               </p>
-              <p className="text-xs text-neutral-300">
+              <p className="text-xs text-[var(--text-secondary)]">
                 Walk to {activeDepartureAlert.buildingCode} {activeDepartureAlert.roomNumber} takes ~{activeDepartureAlert.travelMinutes} mins to arrive on time for {activeDepartureAlert.departureTime}.
               </p>
             </div>
@@ -289,17 +289,17 @@ export default function App() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setActiveDepartureAlert(null)}
-              className="px-3 py-1.5 text-xs font-semibold text-neutral-900 bg-white hover:bg-neutral-100 rounded-lg transition-colors flex items-center gap-1.5 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-lg transition-colors flex items-center gap-1.5 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
             >
-              <Navigation className="w-3.5 h-3.5 text-blue-600" />
+              <Navigation className="w-3.5 h-3.5 text-white" />
               <span>Google Maps</span>
-              <ExternalLink className="w-3 h-3 text-neutral-500" />
+              <ExternalLink className="w-3 h-3 text-white opacity-85" />
             </a>
             <button
               type="button"
               aria-label="Dismiss departure reminder"
               onClick={() => setActiveDepartureAlert(null)}
-              className="p-1.5 text-neutral-400 hover:text-white rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -373,7 +373,7 @@ export default function App() {
       {/* Next Up Modal Box (dismissible with X, Escape, or backdrop tap) */}
       {isNextUpOpen && (
         <div
-          className="fixed inset-0 z-50 bg-neutral-950/55 backdrop-blur-xs flex items-start sm:items-center justify-center overflow-y-auto py-6 px-4 sm:px-16 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-[var(--text-primary)]/45 backdrop-blur-xs flex items-start sm:items-center justify-center overflow-y-auto py-6 px-4 sm:px-16 animate-in fade-in duration-150"
           onClick={() => setIsNextUpOpen(false)}
           role="dialog"
           aria-modal="true"
@@ -390,7 +390,7 @@ export default function App() {
                 type="button"
                 onClick={() => setIsNextUpOpen(false)}
                 aria-label="Close Next Up"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg text-neutral-700 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-50 transition-colors cursor-pointer text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-card)] border border-[var(--border)] shadow-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
               >
                 <X className="w-4 h-4" />
                 <span>Close</span>

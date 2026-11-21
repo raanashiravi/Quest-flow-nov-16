@@ -174,16 +174,16 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
             : 'max-w-xl mx-auto px-4 sm:px-6 min-h-[calc(100vh-5rem)] flex items-center justify-center py-10 animate-in fade-in duration-200'
         }
       >
-        <div className="w-full bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-6 sm:p-8 text-center space-y-6">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+        <div className="w-full bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-sm p-6 sm:p-8 text-center space-y-6">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--sky-tint)] border border-[var(--sky)] text-[var(--sky-strong)] flex items-center justify-center mx-auto">
             <Clock className="w-6 h-6" />
           </div>
 
           <div className="space-y-1.5">
-            <h1 className="text-xl sm:text-2xl font-extrabold text-neutral-900 dark:text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-[var(--text-primary)] tracking-tight">
               No Meetings Loaded Yet
             </h1>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            <p className="text-sm text-[var(--text-secondary)]">
               Load your calendar or try the sample day to see your next meeting right away.
             </p>
           </div>
@@ -192,7 +192,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
             <button
               type="button"
               onClick={onLoadSample}
-              className="flex-1 px-5 py-3.5 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
+              className="flex-1 px-5 py-3.5 rounded-xl text-sm font-bold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
             >
               <Sparkles className="w-4 h-4 shrink-0" />
               <span>Try Sample Walkthrough</span>
@@ -200,9 +200,9 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
             <button
               type="button"
               onClick={onConnectCalendar}
-              className="flex-1 px-5 py-3.5 rounded-xl text-sm font-semibold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              className="flex-1 px-5 py-3.5 rounded-xl text-sm font-semibold text-[var(--text-primary)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors flex items-center justify-center gap-2 cursor-pointer active:scale-95"
             >
-              <Calendar className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <Calendar className="w-4 h-4 shrink-0 text-[var(--sky)]" />
               <span>Input My Calendar</span>
             </button>
           </div>
@@ -298,31 +298,31 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
 
     return (
       <div
-        className={`bg-white dark:bg-neutral-900 rounded-2xl border shadow-md overflow-hidden h-full min-h-[520px] sm:min-h-[470px] flex flex-col ${
+        className={`bg-[var(--bg-card)] rounded-2xl border shadow-md overflow-hidden h-full min-h-[520px] sm:min-h-[470px] flex flex-col ${
           isActiveCard
-            ? 'border-neutral-200 dark:border-neutral-700'
-            : 'border-neutral-200/80 dark:border-neutral-800 pointer-events-none select-none'
+            ? 'border-[var(--border)]'
+            : 'border-[var(--border)] pointer-events-none select-none'
         }`}
       >
         {/* Top Bar */}
-        <div className="px-6 py-4 bg-neutral-50/80 dark:bg-neutral-800/40 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between gap-3 shrink-0">
+        <div className="px-6 py-4 bg-[var(--bg-hover)] border-b border-[var(--border)] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-[var(--sky-strong)]">
               {isInProgress ? 'In Progress' : isPassed ? 'Earlier Meeting' : 'Next Meeting'}
             </span>
             {isToday && !isPassed && !isInProgress && minsUntilStart > 0 && minsUntilStart <= 120 && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 tabular-nums">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-[var(--sky-tint)] text-[var(--sky-strong)] tabular-nums">
                 in {minsUntilStart}m
               </span>
             )}
             {isInProgress && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 tabular-nums">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-[var(--status-ok-bg)] text-[var(--status-ok-fg)] tabular-nums">
                 {endMin - nowMin}m left
               </span>
             )}
           </div>
 
-          <span className="text-xs font-semibold text-neutral-400 dark:text-neutral-500 tabular-nums">
+          <span className="text-xs font-semibold text-[var(--text-muted)] tabular-nums">
             {formatTime12h(targetMeeting.startTime)} – {formatTime12h(targetMeeting.endTime)}
           </span>
         </div>
@@ -330,15 +330,15 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
         <div className="p-6 sm:p-8 flex-1 flex flex-col gap-5">
           {/* 1. Meeting Name & Building Name */}
           <div className="space-y-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white tracking-tight leading-snug">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tracking-tight leading-snug">
               {targetMeeting.title}
             </h1>
 
-            <div className="flex items-center gap-2 text-base font-bold text-neutral-700 dark:text-neutral-200">
+            <div className="flex items-center gap-2 text-base font-bold text-[var(--text-secondary)]">
               {isOnline ? (
-                <Laptop className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <Laptop className="w-4 h-4 text-[var(--sky)] shrink-0" />
               ) : (
-                <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <MapPin className="w-4 h-4 text-[var(--sky)] shrink-0" />
               )}
               <span>{destBuildingName}</span>
             </div>
@@ -346,53 +346,53 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
 
           {/* 2. Time to Reach By & Estimated Travel Time */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/70">
-              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+            <div className="p-4 rounded-xl bg-[var(--sky-tint)] border border-[var(--sky)]">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[var(--sky-strong)]">
                 <Clock className="w-3.5 h-3.5" />
                 <span>Reach By</span>
               </div>
-              <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white tabular-nums">
+              <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-[var(--sky-strong)] tabular-nums">
                 {formatTime12h(targetMeeting.startTime)}
               </p>
               {leaveByTime12h && (
-                <p className="mt-1 text-xs font-semibold text-blue-800 dark:text-blue-300">
+                <p className="mt-1 text-xs font-semibold text-[var(--sky-strong)]">
                   Leave by {leaveByTime12h}
                 </p>
               )}
             </div>
 
-            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/80">
-              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                {travelMode === 'walk' && <Footprints className="w-3.5 h-3.5 text-blue-600" />}
-                {travelMode === 'drive' && <Car className="w-3.5 h-3.5 text-blue-600" />}
-                {travelMode === 'transit' && <Bus className="w-3.5 h-3.5 text-blue-600" />}
+            <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-[var(--border)]">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                {travelMode === 'walk' && <Footprints className="w-3.5 h-3.5 text-[var(--sky)]" />}
+                {travelMode === 'drive' && <Car className="w-3.5 h-3.5 text-[var(--sky)]" />}
+                {travelMode === 'transit' && <Bus className="w-3.5 h-3.5 text-[var(--sky)]" />}
                 <span>Estimated Travel</span>
               </div>
 
               {isOnline ? (
                 <>
-                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white">
+                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)]">
                     0 min
                   </p>
-                  <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
                     Remote · Join online
                   </p>
                 </>
               ) : !hasOrigin ? (
                 <>
-                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white">
+                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)]">
                     First meeting
                   </p>
-                  <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
                     No prior campus meeting today
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white tabular-nums">
+                  <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tabular-nums">
                     ~{activeModeMinutes} min {activeModeLabel}
                   </p>
-                  <p className="mt-1 text-xs font-medium text-neutral-600 dark:text-neutral-300 truncate">
+                  <p className="mt-1 text-xs font-medium text-[var(--text-secondary)] truncate">
                     From {originLabel} → {destCode}
                   </p>
                 </>
@@ -402,14 +402,14 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
 
           {/* 3. Mode Selector (Walk / Drive / Transit) or Remote Indicator */}
           {!isOnline && hasOrigin ? (
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--bg-hover)] border border-[var(--border)]">
               <button
                 type="button"
                 onClick={() => setTravelMode('walk')}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   travelMode === 'walk'
-                    ? 'bg-white dark:bg-neutral-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Footprints className="w-3.5 h-3.5" />
@@ -420,8 +420,8 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                 onClick={() => setTravelMode('drive')}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   travelMode === 'drive'
-                    ? 'bg-white dark:bg-neutral-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Car className="w-3.5 h-3.5" />
@@ -432,8 +432,8 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                 onClick={() => setTravelMode('transit')}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   travelMode === 'transit'
-                    ? 'bg-white dark:bg-neutral-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Bus className="w-3.5 h-3.5" />
@@ -441,8 +441,8 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               </button>
             </div>
           ) : isOnline ? (
-            <div className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-              <Laptop className="w-3.5 h-3.5 shrink-0" />
+            <div className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)]">
+              <Laptop className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
               <span>Virtual session · No campus travel needed</span>
             </div>
           ) : null}
@@ -454,7 +454,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                 href={googleMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 px-5 py-3.5 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                className="flex-1 px-5 py-3.5 rounded-xl text-sm font-bold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
               >
                 <Navigation className="w-4 h-4 shrink-0" />
                 <span>Open in Google Maps</span>
@@ -465,13 +465,13 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
             <button
               type="button"
               onClick={isModal && isFromCalendar ? onClose || onOpenCalendar : onOpenCalendar}
-              className={`flex-1 px-5 py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+              className={`flex-1 px-5 py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] ${
                 isOnline
-                  ? 'font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md'
-                  : 'font-semibold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700'
+                  ? 'font-bold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] shadow-md'
+                  : 'font-semibold text-[var(--text-primary)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)]'
               }`}
             >
-              <Calendar className={`w-4 h-4 shrink-0 ${isOnline ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
+              <Calendar className={`w-4 h-4 shrink-0 ${isOnline ? 'text-white' : 'text-[var(--sky)]'}`} />
               <span>{isModal && isFromCalendar ? 'Back to Calendar' : 'View Full Calendar'}</span>
             </button>
           </div>
@@ -503,7 +503,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               onClick={goPrev}
               disabled={activeIndex === 0}
               aria-label="Previous meeting"
-              className={`hidden sm:flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg text-neutral-700 dark:text-neutral-200 hover:text-blue-600 hover:border-blue-300 dark:hover:border-blue-600 absolute top-[235px] -translate-y-1/2 -left-14 z-40 transition-all cursor-pointer active:scale-95 ${
+              className={`hidden sm:flex items-center justify-center w-11 h-11 rounded-full bg-[var(--bg-card)] border border-[var(--border)] shadow-lg text-[var(--text-secondary)] hover:text-[var(--sky-strong)] hover:border-[var(--sky)] absolute top-[235px] -translate-y-1/2 -left-14 z-40 transition-all cursor-pointer active:scale-95 ${
                 activeIndex === 0 ? 'opacity-0 pointer-events-none scale-90' : 'opacity-100'
               }`}
             >
@@ -518,7 +518,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               onClick={goNext}
               disabled={activeIndex === dayMeetings.length - 1}
               aria-label="Next meeting"
-              className={`hidden sm:flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg text-neutral-700 dark:text-neutral-200 hover:text-blue-600 hover:border-blue-300 dark:hover:border-blue-600 absolute top-[235px] -translate-y-1/2 -right-14 z-40 transition-all cursor-pointer active:scale-95 ${
+              className={`hidden sm:flex items-center justify-center w-11 h-11 rounded-full bg-[var(--bg-card)] border border-[var(--border)] shadow-lg text-[var(--text-secondary)] hover:text-[var(--sky-strong)] hover:border-[var(--sky)] absolute top-[235px] -translate-y-1/2 -right-14 z-40 transition-all cursor-pointer active:scale-95 ${
                 activeIndex === dayMeetings.length - 1 ? 'opacity-0 pointer-events-none scale-90' : 'opacity-100'
               }`}
             >
@@ -575,7 +575,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               onClick={goPrev}
               disabled={activeIndex === 0}
               aria-label="Previous meeting"
-              className="sm:hidden p-2 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 disabled:opacity-25 shadow-xs cursor-pointer"
+              className="sm:hidden p-2 rounded-full bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-secondary)] disabled:opacity-25 shadow-xs cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -593,8 +593,8 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
                     onClick={() => setManualIndex(idx)}
                     className={`h-2 rounded-full transition-all cursor-pointer ${
                       isActiveDot
-                        ? 'w-6 bg-blue-600'
-                        : 'w-2 bg-neutral-300 dark:bg-neutral-700 hover:bg-neutral-400'
+                        ? 'w-6 bg-[var(--sky-strong)]'
+                        : 'w-2 bg-[var(--oatmeal)] hover:bg-[var(--text-muted)]'
                     }`}
                   />
                 );
@@ -606,7 +606,7 @@ export const NextMeetingPage: React.FC<NextMeetingPageProps> = ({
               onClick={goNext}
               disabled={activeIndex === dayMeetings.length - 1}
               aria-label="Next meeting"
-              className="sm:hidden p-2 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 disabled:opacity-25 shadow-xs cursor-pointer"
+              className="sm:hidden p-2 rounded-full bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-secondary)] disabled:opacity-25 shadow-xs cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

@@ -227,38 +227,38 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 space-y-8 animate-in fade-in duration-200">
       {/* Header */}
       <div className="space-y-2">
-        <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+        <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--sky-strong)]">
           <span>Sync & Import Schedule</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--text-primary)] tracking-tight">
           Connect Your Schedule
         </h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 font-normal">
+        <p className="text-sm text-[var(--text-secondary)] font-normal">
           Import your meetings from Outlook, upload an .ics file, or paste your schedule.
         </p>
       </div>
 
       {/* Error Notice */}
       {errorNotice && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 flex items-start gap-3 text-xs animate-in slide-in-from-top-1">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+        <div className="p-4 rounded-2xl bg-[var(--status-late-bg)] border border-[var(--status-late-fg)]/30 text-[var(--status-late-fg)] flex items-start gap-3 text-xs animate-in slide-in-from-top-1">
+          <AlertCircle className="w-4 h-4 text-[var(--status-late-fg)] shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-bold">Input Required</p>
-            <p className="mt-0.5 text-rose-800 dark:text-rose-300 leading-relaxed">{errorNotice}</p>
+            <p className="mt-0.5 leading-relaxed">{errorNotice}</p>
           </div>
         </div>
       )}
 
       {/* Success Notice */}
       {successNotice && (
-        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center gap-2.5 text-xs animate-in slide-in-from-top-1">
-          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-4 rounded-2xl bg-[var(--status-ok-bg)] border border-[var(--status-ok-fg)]/30 text-[var(--status-ok-fg)] flex items-center gap-2.5 text-xs animate-in slide-in-from-top-1">
+          <Check className="w-4 h-4 text-[var(--status-ok-fg)] shrink-0" />
           <span className="font-semibold">{successNotice}</span>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex gap-1 text-xs font-semibold">
+      <div className="p-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl flex gap-1 text-xs font-semibold">
         <button
           type="button"
           onClick={() => {
@@ -267,8 +267,8 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           }}
           className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'outlook'
-              ? 'bg-white dark:bg-neutral-700 text-blue-700 dark:text-white shadow-2xs font-bold'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+              ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
           }`}
         >
           <LinkIcon className="w-3.5 h-3.5" />
@@ -283,8 +283,8 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           }}
           className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'ics'
-              ? 'bg-white dark:bg-neutral-700 text-blue-700 dark:text-white shadow-2xs font-bold'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+              ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
           }`}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -299,8 +299,8 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           }}
           className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'text'
-              ? 'bg-white dark:bg-neutral-700 text-blue-700 dark:text-white shadow-2xs font-bold'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+              ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
@@ -315,29 +315,29 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           }}
           className={`flex-1 py-2.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'sample'
-              ? 'bg-white dark:bg-neutral-700 text-blue-700 dark:text-white shadow-2xs font-bold'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+              ? 'bg-[var(--sky-strong)] text-white shadow-2xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+          <Sparkles className={`w-3.5 h-3.5 ${activeTab === 'sample' ? 'text-white' : 'text-[var(--sky)]'}`} />
           <span>Sample Data</span>
         </button>
       </div>
 
       {/* Tab 1: Outlook / WebCal Link */}
       {activeTab === 'outlook' && (
-        <form onSubmit={handleConnectOutlook} className="p-6 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-4">
+        <form onSubmit={handleConnectOutlook} className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
           <div className="space-y-1">
-            <h2 className="text-base font-bold text-neutral-900 dark:text-white">
+            <h2 className="text-base font-bold text-[var(--text-primary)]">
               Connect via Outlook / iCal Calendar Link
             </h2>
-            <p className="text-xs text-neutral-500 font-normal">
+            <p className="text-xs text-[var(--text-muted)] font-normal">
               Paste your shared calendar link (e.g. from Outlook Web Settings &gt; Shared Calendars &gt; Publish a calendar &gt; ICS link).
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
               Calendar Subscription Link (.ics / webcal://)
             </label>
             <input
@@ -348,9 +348,9 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
                 setErrorNotice(null);
               }}
               placeholder="https://outlook.office365.com/owa/calendar/.../reachcalendar.ics"
-              className="w-full px-3.5 py-2.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-neutral-900 dark:text-white font-medium"
+              className="w-full px-3.5 py-2.5 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] text-[var(--text-primary)] font-medium"
             />
-            <p className="text-[11px] text-neutral-500 mt-1">
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">
               Tip: In Outlook Web, go to Settings ⚙️ → Calendar → Shared calendars → Publish a calendar → copy the ICS link.
             </p>
           </div>
@@ -359,7 +359,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
             <button
               type="submit"
               disabled={isConnectingOutlook || !outlookUrl.trim()}
-              className="px-6 py-2.5 text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="px-6 py-2.5 text-xs sm:text-sm font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               {isConnectingOutlook ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4" />}
               <span>{isConnectingOutlook ? 'Fetching Calendar...' : 'Import from Link'}</span>
@@ -370,7 +370,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
 
       {/* Tab 2: Upload .ICS */}
       {activeTab === 'ics' && (
-        <div className="p-6 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-4">
+        <div className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
           <input
             ref={fileInputRef}
             type="file"
@@ -381,28 +381,28 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
 
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-blue-500 rounded-2xl p-8 text-center cursor-pointer bg-neutral-50/50 dark:bg-neutral-800/40 hover:bg-blue-50/30 transition-all group"
+            className="border-2 border-dashed border-[var(--border)] hover:border-[var(--sky)] rounded-2xl p-8 text-center cursor-pointer bg-[var(--bg-main)] hover:bg-[var(--sky-tint)] transition-all group"
           >
-            <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-xl bg-[var(--sky-tint)] border border-[var(--sky)] text-[var(--sky-strong)] flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition-transform">
               <Upload className="w-6 h-6" />
             </div>
-            <p className="font-bold text-sm text-neutral-800 dark:text-neutral-200">
+            <p className="font-bold text-sm text-[var(--text-primary)]">
               Upload your .ICS Calendar File
             </p>
-            <p className="text-xs text-neutral-500 mt-1">
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               Exported from Outlook, Apple Calendar, or Google Calendar
             </p>
             <button
               type="button"
-              className="mt-3 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+              className="mt-3 px-4 py-2 text-xs font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-lg shadow-xs"
             >
               Browse Files
             </button>
           </div>
 
           {icsLoading && (
-            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-xs font-semibold flex items-center justify-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+            <div className="p-3 rounded-lg bg-[var(--sky-tint)] text-[var(--sky-strong)] text-xs font-semibold flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--sky-strong)]" />
               <span>Parsing calendar file...</span>
             </div>
           )}
@@ -411,12 +411,12 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
 
       {/* Tab 3: Paste Text */}
       {activeTab === 'text' && (
-        <div className="p-6 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-4">
+        <div className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
           <div className="space-y-1">
-            <h2 className="text-base font-bold text-neutral-900 dark:text-white">
+            <h2 className="text-base font-bold text-[var(--text-primary)]">
               Paste Meeting Invitations
             </h2>
-            <p className="text-xs text-neutral-500 font-normal">
+            <p className="text-xs text-[var(--text-muted)] font-normal">
               Paste schedule text or email invitations (e.g. "10:00 - 10:22 Team Sync in MC 5479").
             </p>
           </div>
@@ -429,14 +429,14 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
               setErrorNotice(null);
             }}
             placeholder={`10:00 - 10:22 Team Sync in MC 5479\n10:30 - 11:00 Budget Review in NH 3001\n13:00 - 13:45 IT Systems in DC 1302`}
-            className="w-full p-3 text-xs bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-neutral-900 dark:text-white"
+            className="w-full p-3 text-xs bg-[var(--bg-main)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] text-[var(--text-primary)]"
           />
 
           <button
             type="button"
             onClick={handleParseText}
             disabled={textParsing || !pastedText.trim()}
-            className="px-5 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2.5 text-xs font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             {textParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
             <span>Parse & Add to Calendar</span>
@@ -446,20 +446,20 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
 
       {/* Tab 4: Sample Data Option */}
       {activeTab === 'sample' && (
-        <div className="p-6 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-4">
+        <div className="p-6 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-xs space-y-4">
           <div className="space-y-1">
-            <h2 className="text-base font-bold text-neutral-900 dark:text-white">
+            <h2 className="text-base font-bold text-[var(--text-primary)]">
               University of Waterloo Sample Schedule
             </h2>
-            <p className="text-xs text-neutral-500 font-normal">
+            <p className="text-xs text-[var(--text-muted)] font-normal">
               Preloads 5 realistic faculty meetings in MC, NH, DC, E7, and Teams to test room-to-room navigation.
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-700 dark:text-neutral-300 space-y-1.5 font-normal">
-            <p className="font-semibold text-neutral-900 dark:text-white">Includes:</p>
+          <div className="p-4 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1.5 font-normal">
+            <p className="font-semibold text-[var(--text-primary)]">Includes:</p>
             <p>• 10:00 – 10:22: Team Sync (MC 5479)</p>
-            <p>• 10:30 – 11:00: Budget Review (NH 3001) <span className="text-rose-600 font-semibold">(Tight 8 min gap)</span></p>
+            <p>• 10:30 – 11:00: Budget Review (NH 3001) <span className="text-[var(--status-late-fg)] font-semibold">(Tight 8 min gap)</span></p>
             <p>• 13:00 – 13:45: IT Systems (DC 1302)</p>
             <p>• 14:15 – 15:00: Curriculum Committee (E7 2409)</p>
             <p>• 15:30 – 16:15: Research Sync (Microsoft Teams)</p>
@@ -468,7 +468,7 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
           <button
             type="button"
             onClick={handleLoadSample}
-            className="px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors flex items-center gap-2"
+            className="px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-xs transition-colors flex items-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
             <span>Load Sample Data & Open Calendar</span>
@@ -477,11 +477,11 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
       )}
 
       {/* Navigation Buttons */}
-      <div className="pt-4 flex items-center justify-between border-t border-neutral-200 dark:border-neutral-800">
+      <div className="pt-4 flex items-center justify-between border-t border-[var(--border)]">
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-[var(--text-secondary)] bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] border border-[var(--border)] rounded-xl transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
@@ -490,10 +490,10 @@ export const ConnectCalendarPage: React.FC<ConnectCalendarPageProps> = ({
         <button
           type="button"
           onClick={handleAttemptContinue}
-          className={`px-6 py-2.5 text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+          className={`px-6 py-2.5 text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] ${
             hasMeetings
-              ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer active:scale-[0.98]'
-              : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
+              ? 'bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white cursor-pointer active:scale-[0.98]'
+              : 'bg-[var(--bg-hover)] text-[var(--text-muted)] cursor-not-allowed'
           }`}
         >
           <span>Continue to Calendar</span>

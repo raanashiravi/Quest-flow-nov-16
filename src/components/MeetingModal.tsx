@@ -382,7 +382,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--text-primary)]/45 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
       aria-label={meetingToEdit ? 'Edit Meeting' : 'Schedule Campus Meeting'}
@@ -391,18 +391,18 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
       <div
         ref={modalRef}
-        className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-10 flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-lg bg-[var(--bg-card)] rounded-2xl shadow-xl border border-[var(--border)] overflow-hidden z-10 flex flex-col max-h-[90vh]"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">
+        <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[var(--text-primary)]">
             {meetingToEdit ? 'Edit Meeting' : 'Schedule Campus Meeting'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -412,8 +412,8 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Meeting Title <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+              Meeting Title <span className="text-[var(--status-late-fg)]">*</span>
             </label>
             <input
               type="text"
@@ -421,13 +421,13 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Faculty Senate Working Group"
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900"
+              className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
             />
           </div>
 
           {/* Format Selector: In-Person / Online / Hybrid */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
               Meeting Format
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -436,8 +436,8 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 onClick={() => setFormat('in_person')}
                 className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                   format === 'in_person'
-                    ? 'bg-blue-50 border-blue-600 text-blue-700'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-[var(--sky-tint)] border-[var(--sky-strong)] text-[var(--sky-strong)]'
+                    : 'bg-[var(--bg-main)] border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5" />
@@ -448,8 +448,8 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 onClick={() => setFormat('hybrid')}
                 className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                   format === 'hybrid'
-                    ? 'bg-blue-50 border-blue-600 text-blue-700'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-[var(--sky-tint)] border-[var(--sky-strong)] text-[var(--sky-strong)]'
+                    : 'bg-[var(--bg-main)] border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
@@ -460,8 +460,8 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 onClick={() => setFormat('online')}
                 className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${
                   format === 'online'
-                    ? 'bg-blue-50 border-blue-600 text-blue-700'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-[var(--sky-tint)] border-[var(--sky-strong)] text-[var(--sky-strong)]'
+                    : 'bg-[var(--bg-main)] border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                 }`}
               >
                 <Video className="w-3.5 h-3.5" />
@@ -474,13 +474,13 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           {format !== 'online' && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                   Campus Building
                 </label>
                 <select
                   value={buildingCode}
                   onChange={(e) => setBuildingCode(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900 font-medium"
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)] font-medium"
                 >
                   {Object.values(UW_BUILDINGS).map((b) => (
                     <option key={b.code} value={b.code}>
@@ -491,7 +491,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                   Room Number
                 </label>
                 <input
@@ -499,7 +499,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                   value={roomNumber}
                   onChange={(e) => handleRoomChange(e.target.value)}
                   placeholder="e.g. 5479"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900"
+                  className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
                 />
               </div>
             </div>
@@ -508,7 +508,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           {/* Online Link (if Online or Hybrid) */}
           {format !== 'in_person' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                 Virtual Link or Platform
               </label>
               <input
@@ -516,7 +516,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 value={onlineLink}
                 onChange={(e) => setOnlineLink(e.target.value)}
                 placeholder="e.g. Microsoft Teams / Zoom Meeting Link"
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900"
+                className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
               />
             </div>
           )}
@@ -524,7 +524,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           {/* Date, Time & Quick Durations */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                 Date
               </label>
               <input
@@ -532,12 +532,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900 font-mono"
+                className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)] font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                 Start Time
               </label>
               <input
@@ -545,12 +545,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 required
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900 font-mono"
+                className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)] font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                 End Time
               </label>
               <input
@@ -558,20 +558,20 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 required
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900 font-mono"
+                className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)] font-mono"
               />
             </div>
           </div>
 
           {/* Duration Quick Helpers */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
             <span className="font-medium">Quick duration:</span>
             {[15, 30, 45, 60].map((dur) => (
               <button
                 key={dur}
                 type="button"
                 onClick={() => handleSetDuration(dur)}
-                className="px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-100 text-slate-700 font-mono text-[11px] transition-colors"
+                className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] font-mono text-[11px] transition-colors"
               >
                 +{dur}m
               </button>
@@ -580,7 +580,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
           {/* Organizer */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
               Organizer / Contact
             </label>
             <input
@@ -588,13 +588,13 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               value={organizer}
               onChange={(e) => setOrganizer(e.target.value)}
               placeholder="e.g. Prof. Sarah Chen"
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900"
+              className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
             />
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
               Agenda or Notes
             </label>
             <textarea
@@ -602,20 +602,30 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Brief agenda, AV requirements, or discussion points"
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent text-slate-900"
+              className="w-full px-3 py-2 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)] focus:border-transparent text-[var(--text-primary)]"
             />
           </div>
 
           {/* Live Travel Conflict Warning */}
           {travelWarning && (
-            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div
+              className={`p-3 rounded-lg border text-xs flex items-start gap-2 ${
+                isImpossible
+                  ? 'bg-[var(--status-late-bg)] border-[var(--status-late-fg)]/30 text-[var(--status-late-fg)]'
+                  : 'bg-[var(--status-tight-bg)] border-[var(--status-tight-fg)]/30 text-[var(--status-tight-fg)]'
+              }`}
+            >
+              <AlertTriangle
+                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                  isImpossible ? 'text-[var(--status-late-fg)]' : 'text-[var(--status-tight-fg)]'
+                }`}
+              />
               <div className="flex-1 space-y-2">
-                <p className="text-amber-900 font-medium leading-relaxed">{travelWarning}</p>
+                <p className="font-medium leading-relaxed">{travelWarning}</p>
 
                 {workingSlots.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <span className="text-[11px] font-semibold text-amber-800">
+                    <span className="text-[11px] font-semibold">
                       Times that work:
                     </span>
                     {workingSlots.map((slot) => (
@@ -626,7 +636,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                           setStartTime(slot.startTime);
                           setEndTime(slot.endTime);
                         }}
-                        className="px-2 py-0.5 rounded-md bg-white hover:bg-blue-50 border border-amber-300 hover:border-blue-500 text-slate-900 hover:text-blue-700 font-mono font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                        className="px-2 py-0.5 rounded-md bg-[var(--bg-main)] hover:bg-[var(--sky-tint)] border border-[var(--border)] hover:border-[var(--sky-strong)] text-[var(--text-primary)] hover:text-[var(--sky-strong)] font-mono font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
                       >
                         {slot.startTime}
                       </button>
@@ -640,7 +650,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                       now.getMonth() + 1
                     ).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                     return date === todayLocalStr ? (
-                      <div className="pt-0.5 text-[11px] font-semibold text-amber-800">
+                      <div className="pt-0.5 text-[11px] font-semibold">
                         No times left today
                       </div>
                     ) : null;
@@ -651,7 +661,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           )}
 
           {/* Actions */}
-          <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-100">
+          <div className="pt-2 flex items-center justify-between gap-3 border-t border-[var(--border)]">
             {meetingToEdit && onDeleteMeeting ? (
               <button
                 type="button"
@@ -659,7 +669,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                   onDeleteMeeting(meetingToEdit.id);
                   onClose();
                 }}
-                className="px-3 py-2 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1.5"
+                className="px-3 py-2 text-xs font-semibold text-[var(--status-late-fg)] hover:bg-[var(--status-late-bg)] rounded-lg transition-colors flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete</span>
@@ -672,13 +682,13 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-semibold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>

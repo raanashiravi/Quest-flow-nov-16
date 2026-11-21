@@ -678,9 +678,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
     return (
       <div className="space-y-1.5" id={`meeting-block-${meeting.id}`}>
         {showOfficeWalkRow && officeFirstWalk && (
-          <div className="px-3 py-1.5 rounded-lg border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 text-[11px] font-bold flex items-center justify-between gap-2">
+          <div className="px-3 py-1.5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] text-[11px] font-bold flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+              <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
               <span className="truncate">{officeFirstWalk.label}</span>
             </div>
             <a
@@ -691,7 +691,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               )}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
               title="Open walking directions from office in Google Maps"
             >
               <Navigation className="w-2.5 h-2.5" />
@@ -701,25 +701,23 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           </div>
         )}
         <div
-          className={`px-3.5 py-2.5 rounded-xl border bg-white/80 dark:bg-neutral-900/70 border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 opacity-80 ${
+          className={`px-3.5 py-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
             format === 'online'
-              ? 'border-l-4 border-l-emerald-500'
-              : format === 'hybrid'
-              ? 'border-l-4 border-l-indigo-500'
-              : 'border-l-4 border-l-blue-600'
+              ? 'bg-[var(--bg-card)] border-[var(--border)] border-l-4 border-l-[var(--oatmeal)] text-[var(--text-primary)]'
+              : 'bg-[var(--sky-tint)] border-[var(--border)] border-l-4 border-l-[var(--sky)] text-[var(--sky-strong)]'
           }`}
         >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="text-xs font-bold text-neutral-500 dark:text-neutral-400 tabular-nums shrink-0 w-32">
+          <div className={`text-xs font-bold tabular-nums shrink-0 w-32 ${format === 'online' ? 'text-[var(--text-muted)]' : 'text-[var(--sky-strong)]'}`}>
             {formatTime12h(meeting.startTime)} – {formatTime12h(meeting.endTime)}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-xs sm:text-sm font-bold text-neutral-700 dark:text-neutral-300 truncate">
+              <p className={`text-xs sm:text-sm font-bold truncate ${format === 'online' ? 'text-[var(--text-primary)]' : 'text-[var(--sky-strong)]'}`}>
                 {meeting.title}
               </p>
               {wasLateToday && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-semibold shrink-0">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[10px] font-semibold shrink-0">
                   <Clock className="w-2.5 h-2.5 shrink-0" />
                   <span>Was late</span>
                 </span>
@@ -732,7 +730,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   <span
                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
                       targetProblem.isOverlap ? '' : 'uppercase'
-                    } ${isTight ? 'bg-amber-500 text-amber-950' : 'bg-rose-600 text-white'}`}
+                    } ${
+                      isTight
+                        ? 'bg-[var(--status-tight-bg)] text-[var(--status-tight-fg)]'
+                        : 'bg-[var(--status-late-bg)] text-[var(--status-late-fg)]'
+                    }`}
                   >
                     <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                     <span>{targetProblem.badgeText}</span>
@@ -740,10 +742,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenFixSheet(targetProblem)}
-                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] ${
                       isTight
-                        ? 'bg-amber-600 hover:bg-amber-700'
-                        : 'bg-rose-700 hover:bg-rose-800'
+                        ? 'bg-[var(--status-tight-fg)] hover:opacity-90'
+                        : 'bg-[var(--status-late-fg)] hover:opacity-90'
                     }`}
                   >
                     Fix this
@@ -751,16 +753,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 </span>
               )}
               {!targetProblem && isResolved && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-ok-bg)] text-[var(--status-ok-fg)] text-[10px] font-extrabold uppercase shrink-0">
                   <Check className="w-2.5 h-2.5" />
                   <span>Fixed</span>
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1">
+            <p className={`text-[11px] flex items-center gap-1 ${format === 'online' ? 'text-[var(--text-muted)]' : 'text-[var(--sky-strong)]'}`}>
               {!isOnline && meeting.buildingCode ? (
                 <>
-                  <MapPin className="w-3 h-3 text-blue-600 shrink-0" />
+                  <MapPin className="w-3 h-3 text-[var(--sky)] shrink-0" />
                   <span>
                     {meeting.buildingCode}
                     {meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}
@@ -769,7 +771,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 </>
               ) : (
                 <>
-                  <Video className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <Video className="w-3 h-3 text-[var(--sky)] shrink-0" />
                   <span>Teams</span>
                 </>
               )}
@@ -783,7 +785,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
               title={`Open ${meeting.buildingCode} in Google Maps`}
             >
               <Navigation className="w-3 h-3 shrink-0" />
@@ -794,7 +796,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           <button
             type="button"
             onClick={() => onEditMeeting(meeting)}
-            className="p-1.5 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--sky-strong)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
             title="Edit Meeting"
             aria-label="Edit meeting"
           >
@@ -802,14 +804,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           </button>
 
           {deleteConfirmId === meeting.id ? (
-            <div className="flex items-center gap-1 bg-rose-50 p-0.5 rounded-lg border border-rose-200">
+            <div className="flex items-center gap-1 bg-[var(--status-late-bg)] p-0.5 rounded-lg border border-[var(--status-late-fg)]/30">
               <button
                 type="button"
                 onClick={() => {
                   onDeleteMeeting(meeting.id);
                   setDeleteConfirmId(null);
                 }}
-                className="px-2 py-0.5 text-xs font-bold text-white bg-rose-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                className="px-2 py-0.5 text-xs font-bold text-white bg-[var(--status-late-fg)] rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--status-late-fg)]"
                 aria-label="Confirm delete meeting"
               >
                 Del
@@ -817,7 +819,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <button
                 type="button"
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-1.5 py-0.5 text-xs text-neutral-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="px-1.5 py-0.5 text-xs text-[var(--text-secondary)] rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
                 aria-label="Cancel delete"
               >
                 ✕
@@ -827,7 +829,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             <button
               type="button"
               onClick={() => setDeleteConfirmId(meeting.id)}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+              className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--status-late-fg)] hover:bg-[var(--status-late-bg)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--status-late-fg)]"
               title="Delete Meeting"
               aria-label="Delete meeting"
             >
@@ -849,21 +851,21 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6 animate-in fade-in duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 pb-3 border-b border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between gap-4 pb-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-white">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
             Your Calendar
           </h1>
           {isToday ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 tabular-nums">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] text-white text-xs font-bold tabular-nums">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
               <span>{currentTimeLabel}</span>
             </span>
           ) : (
             <button
               type="button"
               onClick={() => onSelectDate(todayStr)}
-              className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:text-blue-600 transition-colors cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-xs font-semibold text-white transition-colors cursor-pointer"
             >
               Jump to Today
             </button>
@@ -874,9 +876,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <button
                 type="button"
                 onClick={handleScrollToFirstProblem}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-800 dark:text-rose-200 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--status-late-bg)] hover:opacity-90 border border-[var(--status-late-fg)]/30 text-xs font-bold text-[var(--status-late-fg)] transition-colors cursor-pointer"
               >
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                <AlertTriangle className="w-3.5 h-3.5 text-[var(--status-late-fg)] shrink-0" />
                 <span>
                   {impossibleLegs.length} back-to-back{impossibleLegs.length === 1 ? '' : 's'} you can&apos;t make
                 </span>
@@ -885,11 +887,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <button
                 type="button"
                 onClick={problemLegs.length > 0 ? handleScrollToFirstProblem : undefined}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 transition-colors ${
-                  problemLegs.length > 0 ? ' cursor-pointer hover:bg-emerald-100' : 'cursor-default'
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--status-ok-bg)] border border-[var(--status-ok-fg)]/30 text-xs font-bold text-[var(--status-ok-fg)] transition-colors ${
+                  problemLegs.length > 0 ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
                 }`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-[var(--status-ok-fg)] shrink-0" />
                 <span>All meetings reachable</span>
               </button>
             )
@@ -899,15 +901,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
       {/* Fixed Confirmation Notice */}
       {fixedNotice && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
+        <div className="p-3.5 rounded-2xl bg-[var(--status-ok-bg)] border border-[var(--status-ok-fg)]/30 text-[var(--status-ok-fg)] flex items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
           <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <Check className="w-4 h-4 text-[var(--status-ok-fg)] shrink-0" />
             <span className="font-semibold">Fixed · {fixedNotice}</span>
           </div>
           <button
             type="button"
             onClick={() => setFixedNotice(null)}
-            className="p-1 rounded-lg text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-[var(--status-ok-fg)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
             aria-label="Dismiss notice"
           >
             <X className="w-3.5 h-3.5" />
@@ -919,14 +921,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative inline-flex items-center gap-2.5 group w-fit">
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+            <div className="p-2 rounded-xl bg-[var(--sky-tint)] border border-[var(--sky)] text-[var(--sky-strong)]">
               <CalendarIcon className="w-5 h-5" />
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-lg sm:text-2xl font-extrabold tracking-tight text-neutral-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              <span className="text-lg sm:text-2xl font-extrabold tracking-tight text-[var(--text-primary)] group-hover:text-[var(--sky-strong)] transition-colors">
                 {writtenDate}
               </span>
-              <ChevronDown className="w-4 h-4 text-neutral-400 group-hover:text-blue-600 transition-colors shrink-0" />
+              <ChevronDown className="w-4 h-4 text-[var(--sky)] group-hover:text-[var(--sky-strong)] transition-colors shrink-0" />
             </div>
             <input
               type="date"
@@ -943,7 +945,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             <button
               type="button"
               onClick={handleOpenOfficeEditor}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--sky-strong)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
             >
               <span>
                 {settings.office?.buildingCode
@@ -956,14 +958,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           ) : (
             <form
               onSubmit={handleSaveOffice}
-              className="inline-flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-blue-200 dark:border-blue-800 shadow-xs text-xs"
+              className="inline-flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[var(--bg-card)] border border-[var(--sky)] shadow-xs text-xs"
             >
-              <span className="font-semibold text-neutral-700 dark:text-neutral-300">🏢</span>
+              <span className="font-semibold text-[var(--text-secondary)]">🏢</span>
               <select
                 aria-label="Office building"
                 value={officeBuilding}
                 onChange={(e) => setOfficeBuilding(e.target.value)}
-                className="px-2 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="px-2 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)]"
               >
                 {Object.keys(UW_BUILDINGS).map((code) => (
                   <option key={code} value={code}>
@@ -977,9 +979,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 value={officeRoom}
                 onChange={(e) => setOfficeRoom(e.target.value)}
                 placeholder="Room"
-                className="w-16 px-2 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-16 px-2 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] font-semibold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)]"
               />
-              <label className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-300 font-medium">
+              <label className="inline-flex items-center gap-1 text-[var(--text-secondary)] font-medium">
                 <span>Go back to my office when I have at least</span>
                 <select
                   aria-label="Go back to my office when I have at least"
@@ -990,7 +992,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       val === 'never' ? 'never' : (Number(val) as OfficeReturnThreshold)
                     );
                   }}
-                  className="px-1.5 py-1 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="px-1.5 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)]"
                 >
                   <option value={30}>30 min</option>
                   <option value={45}>45 min</option>
@@ -1001,14 +1003,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               </label>
               <button
                 type="submit"
-                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white font-bold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
               >
                 Save
               </button>
               <button
                 type="button"
                 onClick={handleClearOffice}
-                className="px-2 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="px-2 py-1 rounded-lg bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)] text-[var(--text-secondary)] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
               >
                 Clear
               </button>
@@ -1016,14 +1018,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
+        <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border)] p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
           <button
             type="button"
             onClick={() => setFilterFormat('all')}
             className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
               filterFormat === 'all'
-                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
-                : 'text-neutral-600 dark:text-neutral-400'
+                ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
             All ({dayMeetings.length})
@@ -1033,8 +1035,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             onClick={() => setFilterFormat('in_person')}
             className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
               filterFormat === 'in_person'
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'text-neutral-600 dark:text-neutral-400'
+                ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
             Campus ({dayMeetings.filter((m) => m.format === 'in_person' || (!m.format && !m.isOnline)).length})
@@ -1044,8 +1046,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             onClick={() => setFilterFormat('online')}
             className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
               filterFormat === 'online'
-                ? 'bg-emerald-600 text-white shadow-2xs'
-                : 'text-neutral-600 dark:text-neutral-400'
+                ? 'bg-[var(--sky-strong)] text-white shadow-2xs'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
             Online ({dayMeetings.filter((m) => m.format === 'online' || (!m.format && m.isOnline)).length})
@@ -1055,28 +1057,28 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
       {/* Collapsible Dropdown Menu for Passed Time Blocks */}
       {passedMeetings.length > 0 && (
-        <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/60 overflow-hidden">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
           <button
             type="button"
             onClick={() => setShowPassedDropdown((prev) => !prev)}
             aria-expanded={showPassedDropdown}
-            className="w-full px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-neutral-100/80 dark:hover:bg-neutral-800/60 transition-colors cursor-pointer"
+            className="w-full px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-neutral-200/80 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 flex items-center justify-center shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-[var(--bg-hover)] text-[var(--text-secondary)] flex items-center justify-center shrink-0">
                 <History className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs sm:text-sm font-bold text-neutral-800 dark:text-neutral-200">
+                  <span className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
                     {isToday ? 'Earlier Today' : 'Passed Meetings'} ({passedMeetings.length})
                   </span>
-                  <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 tabular-nums hidden sm:inline">
+                  <span className="text-[11px] font-medium text-[var(--text-muted)] tabular-nums hidden sm:inline">
                     {formatTime12h(passedMeetings[0].startTime)} –{' '}
                     {formatTime12h(passedMeetings[passedMeetings.length - 1].endTime)}
                   </span>
                 </div>
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                <p className="text-[11px] text-[var(--text-muted)] truncate">
                   {showPassedDropdown
                     ? 'Click to hide completed time blocks'
                     : 'Hidden because their time blocks have passed — click to view'}
@@ -1084,7 +1086,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-400 shrink-0">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)] shrink-0">
               <span>{showPassedDropdown ? 'Hide' : 'Show'}</span>
               <ChevronDown
                 className={`w-4 h-4 transition-transform duration-200 ${
@@ -1095,7 +1097,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
           </button>
 
           {showPassedDropdown && (
-            <div className="px-3 pb-3 pt-1.5 border-t border-neutral-200/80 dark:border-neutral-800 space-y-2">
+            <div className="px-3 pb-3 pt-1.5 border-t border-[var(--border)] space-y-2">
               {passedMeetings.map((meeting) => (
                 <div key={meeting.id}>{renderPassedBlock(meeting)}</div>
               ))}
@@ -1109,22 +1111,22 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
         <button
           type="button"
           onClick={onOpenNextMeeting}
-          className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-blue-50/85 hover:bg-blue-100/80 dark:bg-blue-950/40 dark:hover:bg-blue-950/60 border border-blue-200 dark:border-blue-800/70 text-xs transition-colors cursor-pointer group text-left shadow-2xs"
+          className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[var(--sky-tint)] hover:bg-[var(--bg-hover)] border border-[var(--sky)] text-xs transition-colors cursor-pointer group text-left shadow-2xs"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300 shrink-0 tabular-nums">
+            <div className="flex items-center gap-1.5 font-bold text-[var(--sky-strong)] shrink-0 tabular-nums">
               <Clock className="w-3.5 h-3.5" />
               <span>{isToday ? `Now · ${currentTimeLabel}` : 'Schedule'}</span>
             </div>
-            <span className="text-blue-300 dark:text-blue-700 shrink-0">·</span>
-            <span className="font-semibold text-neutral-700 dark:text-neutral-200 truncate">
+            <span className="text-[var(--sky)] shrink-0">·</span>
+            <span className="font-semibold text-[var(--text-primary)] truncate">
               {isToday && liveStatusText
                 ? liveStatusText
                 : `${dayMeetings.length} meeting${dayMeetings.length === 1 ? '' : 's'} scheduled`}
             </span>
           </div>
 
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 group-hover:bg-blue-700 text-white text-[11px] font-extrabold shrink-0 shadow-2xs transition-colors">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--sky-strong)] group-hover:bg-[var(--sky-hover)] text-white text-[11px] font-extrabold shrink-0 shadow-2xs transition-colors">
             <Zap className="w-3 h-3" />
             <span>Next Up</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -1135,16 +1137,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       {/* Proportional Time-Block Calendar Grid */}
       <div>
         {filteredMeetings.length === 0 ? (
-          <div className="text-center py-10 px-4 rounded-2xl border-2 border-dashed border-neutral-200 dark:border-neutral-800">
-            <CalendarIcon className="w-9 h-9 mx-auto text-neutral-300 dark:text-neutral-600 mb-2" />
-            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+          <div className="text-center py-10 px-4 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-card)]">
+            <CalendarIcon className="w-9 h-9 mx-auto text-[var(--sky)] mb-2" />
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">
               No meetings on {writtenDate}
             </h3>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
               <button
                 type="button"
                 onClick={onAddMeeting}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold bg-blue-600 text-white hover:bg-blue-700 shadow-md transition-all cursor-pointer active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold bg-[var(--sky-strong)] text-white hover:bg-[var(--sky-hover)] shadow-md transition-all cursor-pointer active:scale-95"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>Add Meeting</span>
@@ -1152,19 +1154,19 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <button
                 type="button"
                 onClick={onBackToConnect}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-[var(--text-secondary)] bg-[var(--bg-main)] border border-[var(--border)] hover:bg-[var(--bg-hover)] cursor-pointer"
               >
                 Connect Calendar
               </button>
             </div>
           </div>
         ) : upcomingMeetings.length === 0 ? (
-          <div className="text-center py-8 px-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-            <Clock className="w-8 h-8 mx-auto text-neutral-300 dark:text-neutral-600 mb-2" />
-            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+          <div className="text-center py-8 px-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]">
+            <Clock className="w-8 h-8 mx-auto text-[var(--sky)] mb-2" />
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">
               All meetings for {isToday ? 'today' : writtenDate} have passed
             </h3>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               Use the dropdown above to review earlier meetings, or schedule a new one.
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
@@ -1172,7 +1174,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowPassedDropdown(true)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-[var(--text-secondary)] bg-[var(--bg-main)] border border-[var(--border)] hover:bg-[var(--bg-hover)] cursor-pointer"
                 >
                   View Passed ({passedMeetings.length})
                 </button>
@@ -1180,7 +1182,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               <button
                 type="button"
                 onClick={onAddMeeting}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold bg-blue-600 text-white hover:bg-blue-700 shadow-md transition-all cursor-pointer active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold bg-[var(--sky-strong)] text-white hover:bg-[var(--sky-hover)] shadow-md transition-all cursor-pointer active:scale-95"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>Add Meeting</span>
@@ -1188,16 +1190,16 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             </div>
           </div>
         ) : timelineLayout ? (
-          <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-2xs overflow-hidden">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xs overflow-hidden">
             <div className="flex relative" style={{ height: `${timelineLayout.totalHeight + 24}px` }}>
               {/* Left Hour Axis */}
-              <div className="w-14 sm:w-16 shrink-0 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/80 relative select-none">
+              <div className="w-14 sm:w-16 shrink-0 border-r border-[var(--border)] bg-[var(--bg-card)] relative select-none">
                 {timelineLayout.hours.map((hour) => {
                   const topPx = timelineLayout.getTopPxForMin(hour * 60);
                   return (
                     <div
                       key={hour}
-                      className="absolute right-2 -translate-y-1/2 text-[11px] font-bold text-neutral-500 dark:text-neutral-500 tabular-nums"
+                      className="absolute right-2 -translate-y-1/2 text-[11px] font-bold text-[var(--text-muted)] tabular-nums"
                       style={{ top: `${topPx}px` }}
                     >
                       {formatHourAxis(hour)}
@@ -1208,7 +1210,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 {/* Current time pill on axis */}
                 {showNowLine && (
                   <div
-                    className="absolute right-1 -translate-y-1/2 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold tabular-nums shadow-xs z-20"
+                    className="absolute right-1 -translate-y-1/2 px-1.5 py-0.5 rounded bg-[var(--sky-strong)] text-white text-[10px] font-extrabold tabular-nums shadow-xs z-20"
                     style={{
                       top: `${timelineLayout.getTopPxForMin(currentMinutes)}px`,
                     }}
@@ -1219,7 +1221,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
               </div>
 
               {/* Right Schedule Canvas */}
-              <div ref={canvasRef} className="flex-1 relative">
+              <div ref={canvasRef} className="flex-1 relative bg-[var(--bg-card)]">
                 {/* Hourly & Half-Hour Grid Lines */}
                 {timelineLayout.hours.map((hour, idx) => {
                   const topPx = timelineLayout.getTopPxForMin(hour * 60);
@@ -1228,12 +1230,12 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   return (
                     <React.Fragment key={hour}>
                       <div
-                        className="absolute left-0 right-0 border-t border-neutral-200/80 dark:border-neutral-800"
+                        className="absolute left-0 right-0 border-t border-[var(--border)]"
                         style={{ top: `${topPx}px` }}
                       />
                       {!isLast && (
                         <div
-                          className="absolute left-0 right-0 border-t border-dashed border-neutral-100 dark:border-neutral-800/50"
+                          className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]"
                           style={{ top: `${halfHourTopPx}px` }}
                         />
                       )}
@@ -1255,11 +1257,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     const heightPx = Math.max(26, bottomPx - topPx - 4);
                     return (
                       <div
-                        className="absolute left-2.5 right-2.5 rounded-xl border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 px-3 flex items-center justify-between gap-2 z-10 text-xs"
+                        className="absolute left-2.5 right-2.5 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-3 flex items-center justify-between gap-2 z-10 text-xs"
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                          <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
                           <span className="font-bold truncate">{officeFirstWalk.label}</span>
                         </div>
                         <a
@@ -1270,7 +1272,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors shrink-0"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[11px] font-bold shadow-2xs transition-colors shrink-0"
                           title="Open walking directions from office in Google Maps"
                         >
                           <Navigation className="w-3 h-3" />
@@ -1299,9 +1301,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                       >
                         {/* 1. Walk to Office */}
-                        <div className="rounded-lg border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
                             <span className="font-bold truncate">
                               {leg.fromMeeting.buildingCode} → Office {officeCode} · {nxtDep.toOfficeWalkMinutes}m walk
                             </span>
@@ -1314,7 +1316,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             )}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
                             title="Open walking directions to office in Google Maps"
                           >
                             <Navigation className="w-2.5 h-2.5" />
@@ -1323,17 +1325,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                           </a>
                         </div>
 
-                        {/* 2. Grey At Your Office Block */}
-                        <div className="flex-1 min-h-[24px] rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-100/90 dark:bg-neutral-800/70 text-neutral-700 dark:text-neutral-200 px-2.5 py-1 flex items-center justify-between gap-2 text-[11px]">
+                        {/* 2. At Your Office Block (--bg-hover) */}
+                        <div className="flex-1 min-h-[24px] rounded-lg border border-[var(--border)] bg-[var(--bg-hover)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px]">
                           <span className="font-bold truncate">
                             🏢 At your office · {nxtDep.officeArrivalTime12h} – {nxtDep.leaveByTime12h}
                           </span>
                         </div>
 
                         {/* 3. Walk from Office to Next Meeting */}
-                        <div className="rounded-lg border border-dashed border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/25 text-blue-900 dark:text-blue-200 px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
+                        <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] shrink-0">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <Footprints className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <Footprints className="w-3.5 h-3.5 shrink-0 text-[var(--sky)]" />
                             <span className="font-bold truncate">
                               Office {officeCode} → {leg.toMeeting.buildingCode} · {nxtDep.walkMinutes}m walk · leave by {nxtDep.leaveByTime12h}
                             </span>
@@ -1346,7 +1348,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             )}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
                             title="Open walking directions from office in Google Maps"
                           >
                             <Navigation className="w-2.5 h-2.5" />
@@ -1376,28 +1378,20 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     return (
                       <div
                         key={leg.id}
-                        className={`absolute left-2.5 right-2.5 rounded-lg border border-dashed px-2.5 flex items-center justify-between gap-2 z-10 text-[11px] leading-none ${
-                          isLate
-                            ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
-                            : isTight
-                            ? 'bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200'
-                            : isResolved
-                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200'
-                            : 'bg-blue-50/60 border-blue-200 text-blue-900 dark:bg-blue-950/25 dark:border-blue-800/60 dark:text-blue-200'
-                        }`}
+                        className="absolute left-2.5 right-2.5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-2.5 flex items-center justify-between gap-2 z-10 text-[11px] leading-none"
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
                           {isResolved ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[var(--status-ok-fg)]" />
                           ) : (
                             <Footprints
                               className={`w-3.5 h-3.5 shrink-0 ${
                                 isLate
-                                  ? 'text-rose-600'
+                                  ? 'text-[var(--status-late-fg)]'
                                   : isTight
-                                  ? 'text-amber-600'
-                                  : 'text-blue-600 dark:text-blue-400'
+                                  ? 'text-[var(--status-tight-fg)]'
+                                  : 'text-[var(--sky)]'
                               }`}
                             />
                           )}
@@ -1405,6 +1399,24 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             {leg.fromMeeting.buildingCode} → {leg.toMeeting.buildingCode} ·{' '}
                             {leg.questFlowTravelMinutes}m walk
                           </span>
+                          {isLate && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-late-bg)] text-[var(--status-late-fg)] text-[10px] font-extrabold uppercase shrink-0">
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                              <span>Late</span>
+                            </span>
+                          )}
+                          {isTight && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-tight-bg)] text-[var(--status-tight-fg)] text-[10px] font-extrabold uppercase shrink-0">
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                              <span>Tight</span>
+                            </span>
+                          )}
+                          {isResolved && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-ok-bg)] text-[var(--status-ok-fg)] text-[10px] font-extrabold uppercase shrink-0">
+                              <Check className="w-2.5 h-2.5 shrink-0" />
+                              <span>Fixed</span>
+                            </span>
+                          )}
                         </div>
                         <a
                           href={getGoogleMapsDirectionsUrl(
@@ -1414,7 +1426,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[10px] font-bold shadow-2xs transition-colors shrink-0"
                           title="Open walking directions in Google Maps"
                         >
                           <Navigation className="w-2.5 h-2.5" />
@@ -1428,29 +1440,21 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   return (
                     <div
                       key={leg.id}
-                      className={`absolute left-2.5 right-2.5 rounded-xl border border-dashed px-3 flex flex-col justify-center gap-1 z-10 ${
-                        isLate
-                          ? 'bg-rose-50/90 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200'
-                          : isTight
-                          ? 'bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200'
-                          : isResolved
-                          ? 'bg-emerald-50/90 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200'
-                          : 'bg-blue-50/60 border-blue-200 text-blue-900 dark:bg-blue-950/25 dark:border-blue-800/60 dark:text-blue-200'
-                      }`}
+                      className="absolute left-2.5 right-2.5 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] px-3 flex flex-col justify-center gap-1 z-10"
                       style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0 text-xs">
                           {isResolved ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[var(--status-ok-fg)]" />
                           ) : (
                             <Footprints
                               className={`w-3.5 h-3.5 shrink-0 ${
                                 isLate
-                                  ? 'text-rose-600'
+                                  ? 'text-[var(--status-late-fg)]'
                                   : isTight
-                                  ? 'text-amber-600'
-                                  : 'text-blue-600 dark:text-blue-400'
+                                  ? 'text-[var(--status-tight-fg)]'
+                                  : 'text-[var(--sky)]'
                               }`}
                             />
                           )}
@@ -1459,19 +1463,19 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             {leg.questFlowTravelMinutes}m walk
                           </span>
                           {isLate && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-late-bg)] text-[var(--status-late-fg)] text-[10px] font-extrabold uppercase shrink-0">
                               <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                               <span>Late</span>
                             </span>
                           )}
                           {isTight && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500 text-amber-950 text-[10px] font-extrabold uppercase shrink-0">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-tight-bg)] text-[var(--status-tight-fg)] text-[10px] font-extrabold uppercase shrink-0">
                               <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                               <span>Tight</span>
                             </span>
                           )}
                           {isResolved && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-ok-bg)] text-[var(--status-ok-fg)] text-[10px] font-extrabold uppercase shrink-0">
                               <Check className="w-2.5 h-2.5 shrink-0" />
                               <span>Fixed</span>
                             </span>
@@ -1487,7 +1491,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             )}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors shrink-0"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[11px] font-bold shadow-2xs transition-colors shrink-0"
                             title="Open walking directions in Google Maps"
                           >
                             <Navigation className="w-3 h-3" />
@@ -1542,14 +1546,12 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         isMenuOpen ? 'overflow-visible z-30' : 'overflow-hidden z-10'
                       } ${
                         isInProgress
-                          ? 'ring-2 ring-blue-500/30 border-blue-500 dark:border-blue-400'
+                          ? 'ring-2 ring-[var(--sky-strong)]/40 border-[var(--sky-strong)]'
                           : 'hover:shadow-md'
                       } ${
                         format === 'online'
-                          ? 'bg-emerald-50/95 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 border-l-4 border-l-emerald-600'
-                          : format === 'hybrid'
-                          ? 'bg-indigo-50/95 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800 border-l-4 border-l-indigo-600'
-                          : 'bg-blue-50/95 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800 border-l-4 border-l-blue-600'
+                          ? 'bg-[var(--bg-card)] border-[var(--border)] border-l-4 border-l-[var(--oatmeal)] text-[var(--text-primary)]'
+                          : 'bg-[var(--sky-tint)] border-[var(--border)] border-l-4 border-l-[var(--sky)] text-[var(--sky-strong)]'
                       }`}
                       style={{
                         top: `${topPx}px`,
@@ -1563,17 +1565,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         <div className="px-2.5 py-1.5 flex items-start justify-between gap-1.5 h-full relative">
                           <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
                             <div>
-                              <h3 className="text-xs font-extrabold text-neutral-900 dark:text-white line-clamp-2 leading-tight">
+                              <h3 className={`text-xs font-extrabold line-clamp-2 leading-tight ${format === 'online' ? 'text-[var(--text-primary)]' : 'text-[var(--sky-strong)]'}`}>
                                 {meeting.title}
                               </h3>
-                              <p className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300 truncate mt-0.5 tabular-nums">
+                              <p className={`text-[11px] font-semibold truncate mt-0.5 tabular-nums ${format === 'online' ? 'text-[var(--text-secondary)]' : 'text-[var(--sky-strong)]'}`}>
                                 {locCompact} · {formatTimeCompact(meeting.startTime)}–{formatTimeCompact(meeting.endTime)}
                               </p>
                             </div>
 
                             <div className="flex items-center gap-1 flex-wrap mt-1">
                               {isInProgress && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--sky-strong)] text-white text-[10px] font-extrabold uppercase shrink-0">
                                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                   <span>{minsLeft}m left</span>
                                 </span>
@@ -1587,7 +1589,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   <span
                                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold truncate max-w-[180px] ${
                                       targetProblem.isOverlap ? '' : 'uppercase'
-                                    } ${isTightProblem ? 'bg-amber-500 text-amber-950' : 'bg-rose-600 text-white'}`}
+                                    } ${
+                                      isTightProblem
+                                        ? 'bg-[var(--status-tight-bg)] text-[var(--status-tight-fg)]'
+                                        : 'bg-[var(--status-late-bg)] text-[var(--status-late-fg)]'
+                                    }`}
                                     title={targetProblem.badgeText}
                                   >
                                     <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
@@ -1596,10 +1602,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleOpenFixSheet(targetProblem)}
-                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] ${
                                       isTightProblem
-                                        ? 'bg-amber-600 hover:bg-amber-700'
-                                        : 'bg-rose-700 hover:bg-rose-800'
+                                        ? 'bg-[var(--status-tight-fg)] hover:opacity-90'
+                                        : 'bg-[var(--status-late-fg)] hover:opacity-90'
                                     }`}
                                   >
                                     Fix this
@@ -1607,7 +1613,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                 </span>
                               )}
                               {isInlineResolved && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-ok-bg)] text-[var(--status-ok-fg)] text-[10px] font-extrabold uppercase shrink-0">
                                   <Check className="w-2.5 h-2.5" />
                                   <span>Fixed</span>
                                 </span>
@@ -1626,13 +1632,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                 setOpenMenuMeetingId(isMenuOpen ? null : meeting.id)
                               }
                               aria-label="More actions"
-                              className="p-1 rounded-lg bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-white transition-colors cursor-pointer text-xs font-bold leading-none"
+                              className="p-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer text-xs font-bold leading-none"
                             >
                               ⋯
                             </button>
 
                             {isMenuOpen && (
-                              <div className="absolute right-0 top-7 w-40 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-xl py-1 z-40 text-xs font-semibold">
+                              <div className="absolute right-0 top-7 w-40 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] shadow-xl py-1 z-40 text-xs font-semibold">
                                 {!isOnline &&
                                   meeting.buildingCode &&
                                   meeting.buildingCode !== 'ONLINE' && (
@@ -1641,9 +1647,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={() => setOpenMenuMeetingId(null)}
-                                      className="flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                                      className="flex items-center gap-2 px-3 py-1.5 text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
                                     >
-                                      <Navigation className="w-3.5 h-3.5 text-blue-600" />
+                                      <Navigation className="w-3.5 h-3.5 text-[var(--sky)]" />
                                       <span>Open in Maps</span>
                                     </a>
                                   )}
@@ -1656,9 +1662,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                     );
                                     setOpenMenuMeetingId(null);
                                   }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer"
                                 >
-                                  <Video className="w-3.5 h-3.5 text-emerald-600" />
+                                  <Video className="w-3.5 h-3.5 text-[var(--sky)]" />
                                   <span>{isOnline ? 'Switch to Campus' : 'Switch to Teams'}</span>
                                 </button>
                                 <button
@@ -1667,9 +1673,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                     setOpenMenuMeetingId(null);
                                     onEditMeeting(meeting);
                                   }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer"
                                 >
-                                  <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                  <Edit3 className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                                   <span>Edit</span>
                                 </button>
                                 <button
@@ -1678,7 +1684,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                     setOpenMenuMeetingId(null);
                                     onDeleteMeeting(meeting.id);
                                   }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--status-late-fg)] hover:bg-[var(--status-late-bg)] cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                   <span>Delete</span>
@@ -1698,11 +1704,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className="text-xs sm:text-sm font-extrabold text-neutral-900 dark:text-white truncate leading-tight">
+                              <h3 className={`text-xs sm:text-sm font-extrabold truncate leading-tight ${format === 'online' ? 'text-[var(--text-primary)]' : 'text-[var(--sky-strong)]'}`}>
                                 {meeting.title}
                               </h3>
                               {isInProgress && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--sky-strong)] text-white text-[10px] font-extrabold uppercase shrink-0">
                                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                   <span>{minsLeft}m left</span>
                                 </span>
@@ -1716,7 +1722,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   <span
                                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
                                       targetProblem.isOverlap ? '' : 'uppercase'
-                                    } ${isTightProblem ? 'bg-amber-500 text-amber-950' : 'bg-rose-600 text-white'}`}
+                                    } ${
+                                      isTightProblem
+                                        ? 'bg-[var(--status-tight-bg)] text-[var(--status-tight-fg)]'
+                                        : 'bg-[var(--status-late-bg)] text-[var(--status-late-fg)]'
+                                    }`}
                                   >
                                     <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                                     <span>{targetProblem.badgeText}</span>
@@ -1724,10 +1734,10 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleOpenFixSheet(targetProblem)}
-                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+                                    className={`px-2 py-0.5 rounded text-white text-[10px] font-extrabold shadow-2xs transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)] ${
                                       isTightProblem
-                                        ? 'bg-amber-600 hover:bg-amber-700'
-                                        : 'bg-rose-700 hover:bg-rose-800'
+                                        ? 'bg-[var(--status-tight-fg)] hover:opacity-90'
+                                        : 'bg-[var(--status-late-fg)] hover:opacity-90'
                                     }`}
                                   >
                                     Fix this
@@ -1735,17 +1745,17 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                 </span>
                               )}
                               {isInlineResolved && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-extrabold uppercase shrink-0">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--status-ok-bg)] text-[var(--status-ok-fg)] text-[10px] font-extrabold uppercase shrink-0">
                                   <Check className="w-2.5 h-2.5" />
                                   <span>Fixed</span>
                                 </span>
                               )}
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">
+                            <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] font-semibold ${format === 'online' ? 'text-[var(--text-secondary)]' : 'text-[var(--sky-strong)]'}`}>
                               {!isOnline && meeting.buildingCode ? (
                                 <span className="inline-flex items-center gap-1">
-                                  <MapPin className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <MapPin className="w-3 h-3 text-[var(--sky)] shrink-0" />
                                   <span>
                                     {meeting.buildingCode}
                                     {meeting.roomNumber ? ` ${meeting.roomNumber}` : ''}
@@ -1753,13 +1763,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   </span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                                  <Video className="w-3 h-3 shrink-0" />
+                                <span className="inline-flex items-center gap-1 text-[var(--text-secondary)]">
+                                  <Video className="w-3 h-3 text-[var(--sky)] shrink-0" />
                                   <span>Teams</span>
                                 </span>
                               )}
-                              <span className="text-neutral-400 dark:text-neutral-500">·</span>
-                              <span className="tabular-nums text-neutral-500 dark:text-neutral-400">
+                              <span className={format === 'online' ? 'text-[var(--text-muted)]' : 'text-[var(--sky-strong)]'}>·</span>
+                              <span className={`tabular-nums ${format === 'online' ? 'text-[var(--text-muted)]' : 'text-[var(--sky-strong)]'}`}>
                                 {formatDurationBadge(durationMin)} ({formatTime12h(meeting.startTime)} –{' '}
                                 {formatTime12h(meeting.endTime)})
                               </span>
@@ -1778,7 +1788,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   href={mapsUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white dark:bg-neutral-900 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white text-[11px] font-bold shadow-2xs transition-colors"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--bg-main)] border border-[var(--border)] text-[var(--sky-strong)] hover:bg-[var(--sky-strong)] hover:text-white text-[11px] font-bold shadow-2xs transition-colors"
                                   title={`Open ${meeting.buildingCode} in Google Maps`}
                                 >
                                   <Navigation className="w-3 h-3 shrink-0" />
@@ -1787,14 +1797,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                               )}
 
                             {!isCompact && (
-                              <div className="hidden sm:inline-flex rounded-lg border border-neutral-200/80 dark:border-neutral-700 p-0.5 bg-white/80 dark:bg-neutral-900/80 text-[11px] font-semibold">
+                              <div className="hidden sm:inline-flex rounded-lg border border-[var(--border)] p-0.5 bg-[var(--bg-main)] text-[11px] font-semibold">
                                 <button
                                   type="button"
                                   onClick={() => onQuickToggleFormat(meeting.id, 'in_person')}
                                   className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
                                     format === 'in_person' || format === 'hybrid'
-                                      ? 'bg-blue-600 text-white'
-                                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                                      ? 'bg-[var(--sky-strong)] text-white'
+                                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                                   }`}
                                 >
                                   Campus
@@ -1804,8 +1814,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                   onClick={() => onQuickToggleFormat(meeting.id, 'online')}
                                   className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
                                     format === 'online'
-                                      ? 'bg-emerald-600 text-white'
-                                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                                      ? 'bg-[var(--sky-strong)] text-white'
+                                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                                   }`}
                                 >
                                   Teams
@@ -1816,7 +1826,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             <button
                               type="button"
                               onClick={() => onEditMeeting(meeting)}
-                              className="p-1 rounded-lg text-neutral-500 hover:text-blue-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                              className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-[var(--sky-strong)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
                               title="Edit Meeting"
                               aria-label="Edit meeting"
                             >
@@ -1824,14 +1834,14 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                             </button>
 
                             {deleteConfirmId === meeting.id ? (
-                              <div className="flex items-center gap-0.5 bg-rose-50 p-0.5 rounded-lg border border-rose-200">
+                              <div className="flex items-center gap-0.5 bg-[var(--status-late-bg)] p-0.5 rounded-lg border border-[var(--status-late-fg)]/30">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     onDeleteMeeting(meeting.id);
                                     setDeleteConfirmId(null);
                                   }}
-                                  className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                                  className="px-1.5 py-0.5 text-[10px] font-bold text-white bg-[var(--status-late-fg)] rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--status-late-fg)]"
                                   aria-label="Confirm delete meeting"
                                 >
                                   Del
@@ -1839,7 +1849,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => setDeleteConfirmId(null)}
-                                  className="px-1 py-0.5 text-[10px] text-neutral-600 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                                  className="px-1 py-0.5 text-[10px] text-[var(--text-secondary)] rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-strong)]"
                                   aria-label="Cancel delete"
                                 >
                                   ✕
@@ -1849,7 +1859,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setDeleteConfirmId(meeting.id)}
-                                className="p-1 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-white/80 dark:hover:bg-neutral-800 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                                className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-[var(--status-late-fg)] hover:bg-[var(--status-late-bg)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--status-late-fg)]"
                                 title="Delete Meeting"
                                 aria-label="Delete meeting"
                               >
@@ -1871,8 +1881,8 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       top: `${timelineLayout.getTopPxForMin(currentMinutes)}px`,
                     }}
                   >
-                    <div className="w-2.5 h-2.5 rounded-full bg-rose-600 -ml-1.5 ring-2 ring-white dark:ring-neutral-900" />
-                    <div className="flex-1 h-0.5 bg-rose-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-[var(--sky-strong)] -ml-1.5 ring-2 ring-[var(--bg-main)]" />
+                    <div className="flex-1 h-0.5 bg-[var(--sky-strong)]" />
                   </div>
                 )}
               </div>
@@ -1882,13 +1892,13 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
       </div>
 
       {/* Footer Suggestion & Navigation: Sync Calendar or Next Meeting */}
-      <div className="pt-4 border-t border-neutral-200 dark:border-neutral-800">
-        <div className="p-4 sm:p-5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="pt-4 border-t border-[var(--border)]">
+        <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-neutral-900 dark:text-white">
+            <p className="text-sm font-bold text-[var(--text-primary)]">
               Sync your own calendar
             </p>
-            <p className="text-xs text-neutral-600 dark:text-neutral-400">
+            <p className="text-xs text-[var(--text-secondary)]">
               Import your Outlook or .ICS schedule, or jump straight to your next meeting with Google Maps directions.
             </p>
           </div>
@@ -1897,7 +1907,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             <button
               type="button"
               onClick={onBackToConnect}
-              className="px-4 py-2.5 text-xs sm:text-sm font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-neutral-900 hover:bg-blue-50 dark:hover:bg-neutral-800 border border-blue-200 dark:border-blue-700 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+              className="px-4 py-2.5 text-xs sm:text-sm font-bold text-[var(--sky-strong)] bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)] rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
               <Link2 className="w-4 h-4 shrink-0" />
               <span>Sync My Calendar</span>
@@ -1906,7 +1916,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
             <button
               type="button"
               onClick={onOpenNextMeeting}
-              className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+              className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
             >
               <span>Next Meeting</span>
               <ArrowRight className="w-4 h-4 shrink-0" />
@@ -2039,28 +2049,28 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-neutral-950/55 backdrop-blur-xs animate-in fade-in duration-150"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[var(--text-primary)]/45 backdrop-blur-xs animate-in fade-in duration-150"
             onClick={() => setActiveFixProblem(null)}
             role="dialog"
             aria-modal="true"
           >
             <div
               ref={fixSheetRef}
-              className="relative w-full sm:max-w-md bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-2xl border-t sm:border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
+              className="relative w-full sm:max-w-md bg-[var(--bg-card)] rounded-t-3xl sm:rounded-2xl border-t sm:border border-[var(--border)] shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Mobile pull handle */}
               <div className="pt-2.5 pb-1 flex justify-center sm:hidden">
-                <div className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+                <div className="w-10 h-1 rounded-full bg-[var(--oatmeal)]" />
               </div>
 
               {/* Sheet Header */}
-              <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-start justify-between gap-3">
+              <div className="px-5 py-4 border-b border-[var(--border)] flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-extrabold text-neutral-900 dark:text-white leading-snug">
+                  <h2 className="text-base font-extrabold text-[var(--text-primary)] leading-snug">
                     {sheetTitle}
                   </h2>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
                     {earlier.title} ({formatTimeCompact(earlier.startTime)}–{formatTimeCompact(earlier.endTime)}) ·{' '}
                     {later.title} ({formatTimeCompact(later.startTime)}–{formatTimeCompact(later.endTime)})
                   </p>
@@ -2068,7 +2078,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveFixProblem(null)}
-                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
                   aria-label="Close"
                 >
                   <X className="w-4 h-4" />
@@ -2080,9 +2090,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                 {/* 1. Primary Option: Move user-created meeting (if not already started) OR Ask to start at... */}
                 {canDirectMove ? (
                   distinctSlots.length > 0 ? (
-                    <div className="p-3.5 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2.5">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 dark:text-blue-200">
-                        <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <div className="p-3.5 rounded-xl bg-[var(--sky-tint)] border border-[var(--sky)] space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--sky-strong)]">
+                        <Clock className="w-3.5 h-3.5 text-[var(--sky)] shrink-0" />
                         <span>Move {targetMeeting.title} to:</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -2101,7 +2111,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                                 `Moved "${targetMeeting.title}" to ${slot.startTime}–${slot.endTime}`
                               );
                             }}
-                            className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold font-mono shadow-xs transition-all cursor-pointer active:scale-95"
+                            className="px-3.5 py-2 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white text-xs font-extrabold font-mono shadow-xs transition-all cursor-pointer active:scale-95"
                           >
                             {formatTimeCompact(slot.startTime)}
                           </button>
@@ -2109,7 +2119,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       </div>
                     </div>
                   ) : isToday ? (
-                    <div className="p-3.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                    <div className="p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)]">
                       No times left today
                     </div>
                   ) : null
@@ -2117,7 +2127,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   <button
                     type="button"
                     onClick={() => triggerDraft('later_start')}
-                    className="w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                    className="w-full px-4 py-3 rounded-xl bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
                   >
                     <MessageSquare className="w-4 h-4 shrink-0" />
                     <span>Ask to start at {earliestStart}</span>
@@ -2129,9 +2139,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                   <button
                     type="button"
                     onClick={() => triggerDraft('join_online')}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border)] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
                   >
-                    <Video className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <Video className="w-3.5 h-3.5 text-[var(--sky)] shrink-0" />
                     <span>Join online instead</span>
                   </button>
 
@@ -2139,9 +2149,9 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                     <button
                       type="button"
                       onClick={() => triggerDraft('later_start')}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-main)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border)] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <MessageSquare className="w-3.5 h-3.5 text-[var(--sky)] shrink-0" />
                       <span>Ask the organizer</span>
                     </button>
                   )}
@@ -2149,15 +2159,15 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
                 {/* Draft Box when "Ask to start at..." / "Ask the organizer" or "Join online instead" is clicked */}
                 {fixDraftType && (
-                  <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 space-y-2.5 animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] space-y-2.5 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)]">
                       <span>
                         {fixDraftType === 'later_start'
                           ? `Note proposing ${earliestStart} start`
                           : 'Note to join online'}
                       </span>
                       {isDraftingFix && (
-                        <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                        <span className="inline-flex items-center gap-1 text-[var(--sky-strong)]">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span>Drafting...</span>
                         </span>
@@ -2168,18 +2178,18 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                       rows={4}
                       value={fixDraftText}
                       onChange={(e) => setFixDraftText(e.target.value)}
-                      className="w-full p-2.5 text-xs rounded-lg bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      className="w-full p-2.5 text-xs rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--sky-strong)]"
                     />
 
                     <div className="flex flex-col sm:flex-row gap-2">
                       <button
                         type="button"
                         onClick={handleCopyDraft}
-                        className="flex-1 px-3 py-2 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:opacity-90 text-xs font-bold flex items-center justify-center gap-1.5 transition-opacity cursor-pointer"
+                        className="flex-1 px-3 py-2 rounded-lg bg-[var(--sky-strong)] hover:bg-[var(--sky-hover)] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       >
                         {fixCopied ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
+                            <Check className="w-3.5 h-3.5 text-white" />
                             <span>Copied</span>
                           </>
                         ) : (
@@ -2200,7 +2210,7 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
                               `Switched "${targetMeeting.title}" to Online (Teams)`
                             );
                           }}
-                          className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          className="flex-1 px-3 py-2 rounded-lg bg-[var(--status-ok-bg)] border border-[var(--status-ok-fg)]/30 hover:opacity-90 text-[var(--status-ok-fg)] text-xs font-bold flex items-center justify-center gap-1.5 transition-opacity cursor-pointer"
                         >
                           <Check className="w-3.5 h-3.5" />
                           <span>Confirm Online</span>
@@ -2212,11 +2222,11 @@ export const CalendarReviewPage: React.FC<CalendarReviewPageProps> = ({
 
                 {/* 3. Leave earlier meeting by HH:MM (information only, when non-overlapping) */}
                 {!isOverlap && (
-                  <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 flex items-center gap-2.5 text-xs text-neutral-700 dark:text-neutral-300">
-                    <Footprints className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <div className="p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border)] flex items-center gap-2.5 text-xs text-[var(--text-secondary)]">
+                    <Footprints className="w-4 h-4 text-[var(--sky)] shrink-0" />
                     <span className="font-medium">
                       Leave the earlier meeting by{' '}
-                      <strong className="font-bold text-neutral-900 dark:text-white">
+                      <strong className="font-bold text-[var(--text-primary)]">
                         {leaveEarlierBy}
                       </strong>
                     </span>

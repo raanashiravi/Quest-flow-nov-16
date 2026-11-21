@@ -1,11 +1,65 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+:root {
+  /* OATMEAL (surfaces) */
+  --bg-main: #EFE9DF;
+  --bg-card: #FBF9F5;
+  --bg-header: #E6DFD3;
+  --bg-hover: #E2DACC;
+  --border: #D8CFC0;
+  --oatmeal: #B5A897;
+
+  /* NORDIC SKY (accent) */
+  --sky-strong: #3F6478;
+  --sky-hover: #33525F;
+  --sky: #7A9BAD;
+  --sky-tint: #E4ECF0;
+
+  /* TEXT */
+  --text-primary: #2B2A28;
+  --text-secondary: #5C574F;
+  --text-muted: #655E59;
+
+  /* STATUS */
+  --status-late-fg: #B91C1C;
+  --status-late-bg: #FEE2E2;
+  --status-tight-fg: #92400E;
+  --status-tight-bg: #FEF3C7;
+  --status-ok-fg: #3F6B4A;
+  --status-ok-bg: #E6EEE8;
+}
+
+@theme inline {
+  --color-bg-main: var(--bg-main);
+  --color-bg-card: var(--bg-card);
+  --color-bg-header: var(--bg-header);
+  --color-bg-hover: var(--bg-hover);
+  --color-border: var(--border);
+  --color-oatmeal: var(--oatmeal);
+
+  --color-sky-strong: var(--sky-strong);
+  --color-sky-hover: var(--sky-hover);
+  --color-sky: var(--sky);
+  --color-sky-tint: var(--sky-tint);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-status-late-fg: var(--status-late-fg);
+  --color-status-late-bg: var(--status-late-bg);
+  --color-status-tight-fg: var(--status-tight-fg);
+  --color-status-tight-bg: var(--status-tight-bg);
+  --color-status-ok-fg: var(--status-ok-fg);
+  --color-status-ok-bg: var(--status-ok-bg);
+}
 
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-color: var(--bg-main);
+    color: var(--text-primary);
   }
 
   .font-display {
@@ -31,9 +85,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 120, 120, 0.25);
+  background: var(--oatmeal);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 120, 120, 0.45);
+  background: var(--text-muted);
 }
